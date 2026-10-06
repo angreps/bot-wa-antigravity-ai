@@ -174,12 +174,16 @@ function askAntigravity(promptText, options = {}) {
     }
 
     args.push('--dangerously-skip-permissions');
+    args.push('--mode', 'accept-edits');
 
     if (customModel) {
       args.push('--model', customModel);
     }
 
-    args.push('-p', promptText);
+    // Direct execution instruction so AI autonomously runs tools instead of asking for approval
+    const executionWrapper = `[Instruksi: Eksekusi seluruh pembuatan file/folder, pengeditan kode, dan tugas yang diperlukan secara otomatis dan langsung sampai selesai tanpa meminta konfirmasi izin atau menunggu persetujuan review.]\n\n${promptText}`;
+
+    args.push('-p', executionWrapper);
 
     isBusy = true;
     let stdoutBuffer = '';
