@@ -143,7 +143,7 @@ Bot ini dibangun menggunakan **`@whiskeysockets/baileys`**, pustaka native yang 
 
 ### 2. Clone Repository
 ```bash
-git clone https://github.com/sohivot/bot-wa-antigravity-ai.git
+git clone https://github.com/angrepps/bot-wa-antigravity-ai.git
 cd bot-wa-antigravity-ai
 ```
 
