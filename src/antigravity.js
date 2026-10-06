@@ -165,7 +165,8 @@ function askAntigravity(promptText, options = {}) {
     const startTime = Date.now();
 
     // Prepare CLI args
-    const args = [];
+    // Use isolated project for WhatsApp bot so it does not load massive IDE history
+    args.push('--project', 'wa-bot');
 
     if (!shouldStartNewConversation) {
       args.push('-c');
@@ -265,6 +266,16 @@ function askAntigravity(promptText, options = {}) {
           chunks: [`⚠️ *Antigravity Notice / Error (${duration}):*\n${logsHeader}${cleanedErr}`],
           fileChanges,
           success: code === 0,
+          duration,
+        });
+      }
+
+      if (code === null && !rawOutput && !errorOutput) {
+        return resolve({
+          text: `${logsHeader}⏱️ *Waktu Proses Habis (Timeout ${duration}):*\nInstruksi memakan waktu lebih dari 3 menit atau terpotong. Cobalah kirim pesan yang lebih lengkap/spesifik atau ketik \`!new\` untuk mereset percakapan baru.`,
+          chunks: [`${logsHeader}⏱️ *Waktu Proses Habis (Timeout ${duration}):*\nInstruksi memakan waktu lebih dari 3 menit atau terpotong. Cobalah kirim pesan yang lebih lengkap/spesifik atau ketik \`!new\` untuk mereset percakapan baru.`],
+          fileChanges,
+          success: false,
           duration,
         });
       }
