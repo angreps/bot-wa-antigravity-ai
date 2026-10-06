@@ -190,7 +190,21 @@ async function startWhatsAppBot() {
   // Message listener
   sock.ev.on('messages.upsert', async (m) => {
     try {
-      const msg = m.messages[0];
+      const incomingList = m.messages || [];
+      if (incomingList.length === 0) return;
+
+      // Auto-read incoming messages to dismiss notifications & unread badges on HP
+      if (commands.getAutoRead()) {
+        const keysToRead = incomingList
+          .filter((item) => item.key && !item.key.fromMe)
+          .map((item) => item.key);
+
+        if (keysToRead.length > 0) {
+          sock.readMessages(keysToRead).catch(() => {});
+        }
+      }
+
+      const msg = incomingList[0];
       if (!msg || !msg.message) return;
 
       const messageId = msg.key.id;
@@ -239,16 +253,81 @@ async function startWhatsAppBot() {
 
       console.log(`[WA Incoming] From: ${senderPhone} (${senderJid}) | fromMe: ${Boolean(msg.key.fromMe)} | Text: "${text.substring(0, 50)}"`);
 
+      const isAuthorized = commands.isAuthorized(senderPhone, senderJid, Boolean(msg.key.fromMe));
+      const isLongTask = isAuthorized && (
+        !text.startsWith(config.prefix) ||
+        text.startsWith(`${config.prefix}ai `) ||
+        text.startsWith(`${config.prefix}sh `) ||
+        text.startsWith(`${config.prefix}exec `) ||
+        text.startsWith(`${config.prefix}new `)
+      );
+
+      let loadingMsg = null;
+      let intervalTimer = null;
+      const startTime = Date.now();
+
+      if (isLongTask) {
+        const preview = text.length > 55 ? text.substring(0, 55) + '...' : text;
+        try {
+          loadingMsg = await sock.sendMessage(senderJid, {
+            text: `⏳ *[Task Berjalan]* Sedang memproses...\n📋 *Task:* _"${preview}"_\n⚡ _Status: Menghubungkan ke Antigravity..._`
+          }, { quoted: msg });
+          if (loadingMsg?.key?.id) {
+            botSentMessageIds.add(loadingMsg.key.id);
+          }
+        } catch (e) {
+          console.warn('[Loading Msg Error]:', e.message);
+        }
+
+        if (loadingMsg) {
+          let elapsedSec = 0;
+          intervalTimer = setInterval(async () => {
+            elapsedSec += 4;
+            try {
+              const editRes = await sock.sendMessage(senderJid, {
+                text: `⏳ *[Task Berjalan (${elapsedSec}s)]* Sedang memproses...\n📋 *Task:* _"${preview}"_\n⚡ _Status: AI sedang menganalisis & mengerjakan task..._`,
+                edit: loadingMsg.key,
+              });
+              if (editRes?.key?.id) botSentMessageIds.add(editRes.key.id);
+            } catch (_) {}
+          }, 4000);
+        }
+      }
+
       // Process message through commands router
       const reply = await commands.handleMessage(senderPhone, text, senderJid, Boolean(msg.key.fromMe));
 
+      if (intervalTimer) clearInterval(intervalTimer);
+
       if (reply) {
-        console.log(`[WA Outgoing] Replying to ${senderJid} (${Array.isArray(reply) ? reply.length + ' chunks' : reply.length + ' chars'})`);
-        // Show typing indicator only when actually replying
-        await sock.sendPresenceUpdate('composing', senderJid);
-        await sleep(300);
-        await sock.sendPresenceUpdate('paused', senderJid);
-        await sendReply(senderJid, reply, msg);
+        const chunks = Array.isArray(reply) ? reply : [reply];
+        console.log(`[WA Outgoing] Replying to ${senderJid} (${chunks.length} chunks)`);
+
+        if (loadingMsg && chunks.length > 0) {
+          const firstChunk = chunks[0];
+          try {
+            const edited = await sock.sendMessage(senderJid, {
+              text: firstChunk,
+              edit: loadingMsg.key
+            });
+            if (edited?.key?.id) botSentMessageIds.add(edited.key.id);
+            console.log(`[WA Outgoing] Successfully edited loading message in-place for ${senderJid}`);
+          } catch (editErr) {
+            console.warn('[Edit Failed, sending normal message]:', editErr.message);
+            await sendReply(senderJid, firstChunk, msg);
+          }
+
+          // Send any remaining chunks sequentially
+          for (let i = 1; i < chunks.length; i++) {
+            await sleep(600);
+            await sock.sendMessage(senderJid, { text: chunks[i] });
+          }
+        } else {
+          await sock.sendPresenceUpdate('composing', senderJid);
+          await sleep(200);
+          await sock.sendPresenceUpdate('paused', senderJid);
+          await sendReply(senderJid, reply, msg);
+        }
       }
     } catch (err) {
       console.error('Error handling message:', err);

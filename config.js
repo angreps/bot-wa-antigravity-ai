@@ -28,17 +28,12 @@ const rawOwners = (process.env.OWNER_NUMBER || '')
   .map(s => s.trim())
   .filter(Boolean);
 
-// Always ensure both phone number and owner LIDs are included
-if (!rawOwners.includes('6285746901737')) rawOwners.push('6285746901737');
-if (!rawOwners.includes('220109020860487')) rawOwners.push('220109020860487');
-if (!rawOwners.includes('82352206270651')) rawOwners.push('82352206270651');
-
 const ownerVariants = new Set();
 for (const o of rawOwners) {
   extractVariants(o).forEach(v => ownerVariants.add(v));
 }
 
-const rawBot = (process.env.BOT_NUMBER || '6285732196370').replace(/[^0-9]/g, '');
+const rawBot = (process.env.BOT_NUMBER || '').replace(/[^0-9]/g, '');
 const botVariants = extractVariants(rawBot);
 botVariants.forEach(v => ownerVariants.add(v));
 
@@ -53,10 +48,11 @@ const fallbackCwd = fs.existsSync(botRconPath) ? botRconPath : process.cwd();
 module.exports = {
   botName: process.env.BOT_NAME || 'Antigravity Laptop AI',
   owners: Array.from(ownerVariants),
-  primaryOwnerPhone: '6285746901737',
-  primaryOwnerLid: '220109020860487',
-  botNumber: rawBot.startsWith('8') ? '62' + rawBot : rawBot,
+  primaryOwnerPhone: rawOwners.find(o => o.startsWith('62') || o.startsWith('08')) || rawOwners[0] || '',
+  primaryOwnerLid: rawOwners.find(o => o.length > 13) || '',
+  botNumber: rawBot ? (rawBot.startsWith('8') ? '62' + rawBot : rawBot) : '',
   selfbotMode: (process.env.SELFBOT_MODE || 'true').toLowerCase() === 'true',
+  autoRead: (process.env.AUTO_READ || 'true').toLowerCase() === 'true',
   agyPath: process.env.AGY_PATH || defaultLocalAgy,
   agyModel: process.env.AGY_MODEL || '',
   usePairingCode: (process.env.USE_PAIRING_CODE || 'true').toLowerCase() === 'true',

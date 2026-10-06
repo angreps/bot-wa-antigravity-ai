@@ -173,6 +173,8 @@ npm start
 | `!pwd` | Cek path direktori kerja aktif |
 | `!ls` | Tampilkan daftar file & folder di direktori aktif |
 | `!cat <file>` | Baca isi file teks |
+| `!selfbot on/off` | Mode selfbot (hanya balas chat owner) |
+| `!autoread on/off` | Otomatis baca chat masuk (hilangkan notifikasi & centang biru di HP) |
 | `!adduser <nomor>` | Tambahkan nomor admin tambahan |
 
 ---

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const terminal = require('./terminal');
+const tracker = require('./tracker');
 
 // State tracking
 let isBusy = false;
@@ -247,11 +248,18 @@ function askAntigravity(promptText, options = {}) {
         }
       }
 
+      const fileChanges = tracker.getWorkspaceChanges(workingDir);
+      let logsHeader = '';
+      if (fileChanges.length > 0) {
+        logsHeader = `📝 *Logs Perubahan File:*\n${fileChanges.join('\n')}\n\n`;
+      }
+
       if (!rawOutput && errorOutput) {
         const cleanedErr = cleanAndFormatOutput(errorOutput);
         return resolve({
-          text: `⚠️ *Antigravity Notice / Error (${duration}):*\n${cleanedErr}`,
-          chunks: [`⚠️ *Antigravity Notice / Error (${duration}):*\n${cleanedErr}`],
+          text: `⚠️ *Antigravity Notice / Error (${duration}):*\n${logsHeader}${cleanedErr}`,
+          chunks: [`⚠️ *Antigravity Notice / Error (${duration}):*\n${logsHeader}${cleanedErr}`],
+          fileChanges,
           success: code === 0,
           duration,
         });
@@ -259,19 +267,21 @@ function askAntigravity(promptText, options = {}) {
 
       if (!rawOutput && !errorOutput) {
         return resolve({
-          text: `_Selesai tanpa output teks (Exit code: ${code}, Durasi: ${duration})_`,
-          chunks: [`_Selesai tanpa output teks (Exit code: ${code}, Durasi: ${duration})_`],
+          text: `${logsHeader}_Selesai tanpa output teks (Exit code: ${code}, Durasi: ${duration})_`,
+          chunks: [`${logsHeader}_Selesai tanpa output teks (Exit code: ${code}, Durasi: ${duration})_`],
+          fileChanges,
           success: true,
           duration,
         });
       }
 
-      const formatted = cleanAndFormatOutput(rawOutput);
+      const formatted = logsHeader + cleanAndFormatOutput(rawOutput);
       const chunks = splitIntoChunks(formatted);
 
       resolve({
         text: formatted,
         chunks: chunks,
+        fileChanges,
         success: code === 0,
         duration,
       });
