@@ -138,7 +138,12 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
     const busy = antigravity.isAgentBusy() ? '⏳ Sedang Bekerja' : '🟢 Siap (Idle)';
     const model = antigravity.getModel();
 
-    return `📊 *STATUS LAPTOP & ANTIGRAVITY*
+    const isGroup = Boolean(senderJid && (senderJid.endsWith('@g.us') || senderJid.includes('@g.us')));
+    const isOwnerUser = Boolean(isFromMe || isAuthorized(senderPhone, senderJid, isFromMe));
+    // Sembunyikan direktori aktif jika di grup / publik, hanya tampil untuk owner di private chat
+    const showCwd = isOwnerUser && !isGroup;
+
+    let reply = `📊 *STATUS LAPTOP & ANTIGRAVITY*
 ─────────────────────────
 🖥️ *Host:* ${s.hostname}
 🐧 *OS:* ${s.os || 'Debian 12'}
@@ -148,9 +153,13 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
 🤖 *Antigravity:* ${busy}
 🎯 *Model Aktif:* ${model}
 🔒 *Selfbot:* ${isSelfbot ? 'Aktif (Owner Only)' : 'Nonaktif'}
-👁️ *Auto-Read:* ${isAutoRead ? 'Aktif (Notif HP Dibersihkan)' : 'Nonaktif'}
-📁 *Direktori Aktif:*
-\`${s.cwd}\``;
+👁️ *Auto-Read:* ${isAutoRead ? 'Aktif (Notif HP Dibersihkan)' : 'Nonaktif'}`;
+
+    if (showCwd) {
+      reply += `\n📁 *Direktori Aktif:*\n\`${s.cwd}\``;
+    }
+
+    return reply;
   }
 
   // 4. STOP / CANCEL PROCESS
