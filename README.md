@@ -270,5 +270,13 @@ bot-wa-antigravity-ai/
 
 ---
 
+## 🔔 Notifikasi & Webhook
+
+Repository ini telah terintegrasi dengan **Discord Webhook** untuk menyiarkan aktivitas pembaruan kode secara otomatis:
+- **Realtime Commit & Push Alert:** Notifikasi otomatis ke Discord saat ada commit atau push baru di branch `main`.
+- **Release & PR Tracker:** Melacak pembuatan pull request, isu, dan rilis versi baru.
+
+---
+
 ## 📄 Lisensi
 Proyek ini dilisensikan di bawah [MIT License](LICENSE).
