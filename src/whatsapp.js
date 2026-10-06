@@ -19,6 +19,9 @@ const logger = pino({ level: 'silent' });
 // Track message IDs sent by the bot to prevent self-reply loops
 const botSentMessageIds = new Set();
 
+// Cache processed incoming message IDs across reconnects to prevent duplicate execution & rollbacks
+const processedMessageIds = new Set();
+
 // Cache recent messages for Signal Protocol retry negotiation
 const recentMessagesCache = new Map();
 
@@ -190,6 +193,9 @@ async function startWhatsAppBot() {
   // Message listener
   sock.ev.on('messages.upsert', async (m) => {
     try {
+      // Only process live notifications, ignore backlog/history sync stanzas
+      if (m.type !== 'notify') return;
+
       const incomingList = m.messages || [];
       if (incomingList.length === 0) return;
 
@@ -208,6 +214,23 @@ async function startWhatsAppBot() {
       if (!msg || !msg.message) return;
 
       const messageId = msg.key.id;
+
+      // Prevent duplicate processing of messages already handled (especially on reconnect)
+      if (processedMessageIds.has(messageId)) {
+        return;
+      }
+      processedMessageIds.add(messageId);
+      if (processedMessageIds.size > 2000) {
+        const oldest = processedMessageIds.values().next().value;
+        processedMessageIds.delete(oldest);
+      }
+
+      // Ignore old messages (e.g. sent before reconnect or > 90 seconds old)
+      const nowSec = Math.floor(Date.now() / 1000);
+      const msgTimestamp = Number(msg.messageTimestamp) || nowSec;
+      if (nowSec - msgTimestamp > 90) {
+        return;
+      }
 
       // Cache message for Signal retry handler
       recentMessagesCache.set(messageId, msg.message);
