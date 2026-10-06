@@ -7,6 +7,17 @@ const antigravity = require('./antigravity');
 // Allow dynamically added owners
 const authorizedUsers = new Set(config.owners);
 let isSelfbot = config.selfbotMode;
+let isAutoRead = config.autoRead;
+
+function setAutoRead(enabled) {
+  isAutoRead = Boolean(enabled);
+  config.autoRead = isAutoRead;
+  return isAutoRead;
+}
+
+function getAutoRead() {
+  return isAutoRead;
+}
 
 function isAuthorized(senderPhone, senderJid, isFromMe) {
   if (isFromMe) return true;
@@ -89,9 +100,9 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
 • \`${prefix}cat <file>\` : Baca isi file
 • \`${prefix}status\` : Cek RAM, CPU, Uptime laptop
 
-🔒 *Keamanan & Selfbot:*
-• \`${prefix}selfbot on\` : Aktifkan mode selfbot (hanya balas owner, abaikan orang lain)
-• \`${prefix}selfbot off\` : Nonaktifkan mode selfbot
+🔒 *Keamanan & Pengaturan:*
+• \`${prefix}selfbot on/off\` : Mode selfbot (hanya balas owner)
+• \`${prefix}autoread on/off\` : Otomatis baca pesan & hilangkan notif HP
 • \`${prefix}adduser <nomor>\` : Beri akses admin ke nomor lain`;
   }
 
@@ -108,6 +119,19 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
     return '🔓 *Mode Selfbot DINONAKTIFKAN!* Bot sekarang akan merespons pesan publik (menolak akses non-owner).';
   }
 
+  // 2b. AUTOREAD TOGGLE
+  if (text === `${prefix}autoread` || text === `${prefix}autoread status`) {
+    return `👁️ *Status Auto-Read:* ${isAutoRead ? '🟢 AKTIF (Otomatis baca pesan & hilangkan notif HP)' : '⚪ NONAKTIF'}\n\n_Ketik \`${prefix}autoread on\` atau \`${prefix}autoread off\` untuk mengubah._`;
+  }
+  if (text === `${prefix}autoread on`) {
+    setAutoRead(true);
+    return '👁️ *Auto-Read DIAKTIFKAN!* Semua pesan masuk akan langsung ditandai terbaca (centang biru) sehingga notifikasi tidak menumpuk di HP.';
+  }
+  if (text === `${prefix}autoread off`) {
+    setAutoRead(false);
+    return '👁️ *Auto-Read DINONAKTIFKAN!* Pesan masuk tidak akan otomatis ditandai terbaca.';
+  }
+
   // 3. SYSTEM STATUS
   if (text === `${prefix}status`) {
     const s = terminal.getSystemStatus();
@@ -117,13 +141,14 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
     return `📊 *STATUS LAPTOP & ANTIGRAVITY*
 ─────────────────────────
 🖥️ *Host:* ${s.hostname}
-⚙️ *Platform:* ${s.platform}
+🐧 *OS:* ${s.os || 'Debian 12'}
 ⚡ *CPU:* ${s.cpus}
 💾 *RAM:* ${s.memory}
 ⏱️ *Uptime:* ${s.systemUptime}
 🤖 *Antigravity:* ${busy}
 🎯 *Model Aktif:* ${model}
 🔒 *Selfbot:* ${isSelfbot ? 'Aktif (Owner Only)' : 'Nonaktif'}
+👁️ *Auto-Read:* ${isAutoRead ? 'Aktif (Notif HP Dibersihkan)' : 'Nonaktif'}
 📁 *Direktori Aktif:*
 \`${s.cwd}\``;
   }
@@ -277,4 +302,6 @@ module.exports = {
   addAuthorizedUser,
   setSelfbotMode,
   getSelfbotMode,
+  setAutoRead,
+  getAutoRead,
 };

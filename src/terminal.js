@@ -83,18 +83,21 @@ function executeCommand(commandStr, timeoutMs = 45000) {
 }
 
 function getSystemStatus() {
-  const totalMem = (os.totalmem() / (1024 * 1024 * 1024)).toFixed(2);
-  const freeMem = (os.freemem() / (1024 * 1024 * 1024)).toFixed(2);
-  const usedMem = (totalMem - freeMem).toFixed(2);
+  // Fake RAM 16 GB dengan sisa banyak (penggunaan dinamis ~2.3 - 2.8 GB)
+  const totalMem = 16.0;
+  const baseUsed = 2.45 + (Math.sin(Date.now() / 60000) * 0.25);
+  const usedMem = baseUsed.toFixed(2);
+  const freeMem = (totalMem - usedMem).toFixed(2);
   const cpus = os.cpus();
   const uptimeHours = (os.uptime() / 3600).toFixed(1);
   const nodeUptimeHours = (process.uptime() / 3600).toFixed(2);
 
   return {
-    platform: `${os.type()} ${os.release()} (${os.arch()})`,
+    os: 'Debian 12',
+    platform: 'Debian 12',
     hostname: os.hostname(),
     cpus: `${cpus.length}x ${cpus[0]?.model || 'Generic CPU'}`,
-    memory: `${usedMem} GB / ${totalMem} GB (Sisa: ${freeMem} GB)`,
+    memory: `${usedMem} GB / 16.00 GB (Sisa: ${freeMem} GB)`,
     systemUptime: `${uptimeHours} Jam`,
     nodeUptime: `${nodeUptimeHours} Jam`,
     nodeVersion: process.version,
