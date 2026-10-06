@@ -63,7 +63,7 @@ function getSelfbotMode() {
  * @param {boolean} isFromMe
  * @returns {Promise<string|string[]|null>}
  */
-async function handleMessage(senderPhone, messageText, senderJid, isFromMe = false) {
+async function handleMessage(senderPhone, messageText, senderJid, isFromMe = false, options = {}) {
   const text = (messageText || '').trim();
   if (!text) return null;
 
@@ -325,6 +325,13 @@ Ketik pertanyaan langsung *tanpa tanda seru* untuk chat dengan AI!
     if (!limitCheck.allowed) {
       return `⚠️ *Limit Chat AI Anda Habis!*\n\nQuota gratis harian Anda (*${limitCheck.max}/${limitCheck.max} chat*) sudah habis untuk hari ini.\n\n🔄 Quota akan otomatis di-reset besok pukul 00:00 WIB.\n💡 Hubungi Owner bot untuk melakukan *upgrade limit* akun Anda!`;
     }
+  }
+
+  // If user quote-replied to a specific message, include quoted context
+  if (options && options.quotedText && options.quotedText.trim()) {
+    const cleanQuoted = options.quotedText.trim();
+    const previewQuoted = cleanQuoted.length > 1500 ? cleanQuoted.substring(0, 1500) + '...' : cleanQuoted;
+    promptQuery = `[Konteks Pesan Yang Dikutip / Di-reply oleh Pengguna]:\n"${previewQuoted}"\n\n[Pesan / Tanggapan Pengguna]:\n${promptQuery}`;
   }
 
   // Send prompt directly to Antigravity CLI

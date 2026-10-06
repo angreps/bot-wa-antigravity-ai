@@ -40,6 +40,21 @@ function askQuestion(query) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function extractQuotedText(msg) {
+  const contextInfo = msg?.message?.extendedTextMessage?.contextInfo ||
+                      msg?.message?.imageMessage?.contextInfo ||
+                      msg?.message?.videoMessage?.contextInfo ||
+                      msg?.message?.documentMessage?.contextInfo;
+  if (!contextInfo?.quotedMessage) return '';
+  const q = contextInfo.quotedMessage;
+  if (q.conversation) return q.conversation;
+  if (q.extendedTextMessage?.text) return q.extendedTextMessage.text;
+  if (q.imageMessage?.caption) return q.imageMessage.caption;
+  if (q.videoMessage?.caption) return q.videoMessage.caption;
+  if (q.documentMessage?.caption) return q.documentMessage.caption;
+  return '';
+}
+
 async function startWhatsAppBot() {
   if (!fs.existsSync(config.sessionDir)) {
     fs.mkdirSync(config.sessionDir, { recursive: true });
@@ -321,8 +336,11 @@ async function startWhatsAppBot() {
         }
       }
 
+      // Extract quoted text if user replied to an earlier message
+      const quotedText = extractQuotedText(msg);
+
       // Process message through commands router
-      const reply = await commands.handleMessage(senderPhone, text, senderJid, Boolean(msg.key.fromMe));
+      const reply = await commands.handleMessage(senderPhone, text, senderJid, Boolean(msg.key.fromMe), { quotedText });
 
       if (intervalTimer) clearInterval(intervalTimer);
 
