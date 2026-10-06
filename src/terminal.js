@@ -95,7 +95,7 @@ function getSystemStatus() {
   return {
     os: 'Debian 12',
     platform: 'Debian 12',
-    hostname: os.hostname(),
+    hostname: 'ai-antigravity',
     cpus: `${cpus.length}x ${cpus[0]?.model || 'Generic CPU'}`,
     memory: `${usedMem} GB / 16.00 GB (Sisa: ${freeMem} GB)`,
     systemUptime: `${uptimeHours} Jam`,

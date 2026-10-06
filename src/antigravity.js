@@ -165,6 +165,7 @@ function askAntigravity(promptText, options = {}) {
     const startTime = Date.now();
 
     // Prepare CLI args
+    const args = [];
     // Use isolated project for WhatsApp bot so it does not load massive IDE history
     args.push('--project', 'wa-bot');
 
