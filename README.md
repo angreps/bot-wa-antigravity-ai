@@ -1,44 +1,51 @@
 # 🤖 Bot WhatsApp Antigravity AI
 
-> **WhatsApp AI Assistant & Container / Laptop Remote Controller**  
-> Bridge mandiri yang menghubungkan akun **WhatsApp** Anda langsung ke **Antigravity CLI (`agy`)** dan **PowerShell / Terminal** di laptop atau server Windows.
+> **WhatsApp AI Assistant & Cloud / VPS / RDP / Local Server Remote Controller**  
+> Bridge mandiri yang menghubungkan akun **WhatsApp** Anda langsung ke **Antigravity CLI (`agy`)** dan **Terminal / Shell** di VPS, RDP, Cloud Server, maupun Komputer Lokal.
 
 ---
 
 ## 📊 Arsitektur & Flowchart Sistem
 
-Berikut alur kerja interaksi antara pengguna WhatsApp, core bot Baileys, eksekutor terminal, dan AI Engine Antigravity:
+Berikut alur kerja interaksi antara pengguna WhatsApp, core bot Baileys (WhatsApp WebSocket), eksekutor terminal, dan AI Engine Antigravity:
 
 ```mermaid
 flowchart TD
-    A["📱 Pengguna WhatsApp (Owner)"] -->|"Kirim Pesan / Perintah"| B["⚡ WhatsApp Socket (Baileys)"]
+    A["📱 Pengguna WhatsApp (Owner / Publik)"] -->|"Kirim Pesan / Perintah"| B["⚡ WhatsApp WebSocket (Baileys)"]
     
     B --> C{"🔒 Verifikasi Pengirim (Auth Check)"}
-    C -- "Bukan Owner" --> D["🚫 Abaikan Pesan (Selfbot Mode)"]
+    C -- "Bukan Owner & Selfbot ON" --> D["🚫 Abaikan Pesan (Silent Ignore)"]
+    C -- "Bukan Owner & Selfbot OFF" --> P{"🔋 Cek Kuota Harian (Rate Limit)"}
+    P -- "Kuota Habis" --> P1["⚠️ Kirim Peringatan Limit Habis"]
+    P -- "Kuota Tersedia" --> J["🤖 Antigravity Bridge (CLI agy)"]
+    
     C -- "Owner / Terotorisasi" --> E{"🔍 Parser & Router Pesan"}
     
     %% Cabang Terminal & Sistem
     E -->|"Prefix Perintah (!sh, !cd, !ls, !status)"| F["💻 Terminal & System Controller"]
-    F -->|"Eksekusi Perintah"| G["🖥️ Windows PowerShell / OS"]
+    F -->|"Eksekusi Shell / OS"| G["🖥️ OS Server (Linux / Windows / Cloud)"]
     G -->|"Output Command / Spesifikasi"| H["📤 Format & Kirim Balasan"]
     
-    %% Cabang Konfigurasi AI
-    E -->|"Manajemen Model (!model, !models, !new)"| I["⚙️ AI Session Manager"]
+    %% Cabang Konfigurasi AI & Limit
+    E -->|"Manajemen Kuota (!setlimit, !addlimit)"| Q["💾 Database Kuota (limits.json)"]
+    Q --> H
+    E -->|"Manajemen Model & Sesi (!model, !models, !new)"| I["⚙️ AI Session Manager"]
     I -->|"Ganti Model / Reset Konteks"| H
     
     %% Cabang AI Prompting
-    E -->|"Pesan Percakapan Biasa"| J["🤖 Antigravity Bridge (CLI agy)"]
+    E -->|"Pesan Percakapan Biasa"| J
     J -->|"Multi-Turn Conversation (-c)"| K["🧠 Antigravity Core (Gemini / Claude)"]
     K -->|"Akses Workspace & Analisis Kode"| L["📁 Workspace Files & Proyek"]
     L --> K
-    K -->|"Respons Jawaban & Kode"| M["✂️ Message Chunker (Pecah teks panjang)"]
+    K -->|"Respons Jawaban & Kode"| M["✂️ Message Chunker & In-place Edit"]
     M --> H
     
     %% Output Akhir
-    H -->|"Balas via WhatsApp"| A
+    H -->|"Kirim / Edit Pesan via WS"| A
+    P1 -->|"Kirim Peringatan"| A
     
-    %% WebSocket Monitoring
-    B -.->|"Realtime Event Broadcast"| W["🌐 WebSocket Server (Port 8765)"]
+    %% WebSocket Monitoring Eksternal
+    B -.->|"Realtime Event Broadcast"| W["🌐 WebSocket Monitoring Server (Port 8765)"]
 ```
 
 ### 🔄 Alur Percakapan Detail (Sequence Diagram)
@@ -46,51 +53,84 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as 📱 Owner WhatsApp
-    participant Bot as 🤖 Baileys Bot
-    participant Cmd as ⚙️ Router
-    participant AGY as 🧠 Antigravity (agy.exe)
-    participant PS as 💻 PowerShell
+    actor Owner as 📱 Owner WhatsApp
+    actor Public as 👥 Pengguna Publik
+    participant Bot as ⚡ Baileys WebSocket
+    participant Lim as 🔋 Limit Engine
+    participant Cmd as ⚙️ Command Router
+    participant AGY as 🧠 Antigravity (agy)
+    participant Shell as 💻 OS Terminal
 
-    User->>Bot: Kirim "!sh Get-Process node"
+    %% Alur Owner Perintah Terminal
+    Owner->>Bot: Kirim "!sh uptime"
     Bot->>Cmd: Validasi Owner & Parse Perintah
-    Cmd->>PS: Eksekusi di PowerShell
-    PS-->>Cmd: Hasil Output Proses
-    Cmd-->>User: Kirim pesan balasan WhatsApp
+    Cmd->>Shell: Eksekusi di Terminal OS
+    Shell-->>Cmd: Hasil Output Uptime
+    Cmd-->>Owner: Kirim Balasan Hasil Terminal
 
-    User->>Bot: Kirim "Perbaiki fungsi login di bot.js"
-    Bot->>Cmd: Route ke AI Prompt
-    Cmd->>AGY: Jalankan 'agy -c ...' pada Workspace
-    AGY-->>Cmd: Hasil Analisis & Solusi Kode
-    Cmd-->>User: Kirim balasan bertahap (Chunked)
+    %% Alur Publik dengan Kuota
+    Public->>Bot: Kirim "Jelaskan fungsi async/await"
+    Bot->>Lim: Cek Sisa Kuota Pengguna
+    alt Kuota Tersedia
+        Lim-->>Bot: Sisa 9 chat (Allowed)
+        Bot-->>Public: Kirim Status Loading ("⏳ Sedang menganalisis...")
+        Bot->>AGY: Jalankan 'agy -c ...'
+        AGY-->>Bot: Output Respons Selesai
+        Bot-->>Public: Edit Pesan In-Place Menjadi Jawaban Akhir + Sisa Kuota
+    else Kuota Habis
+        Lim-->>Bot: Kuota Habis (Denied)
+        Bot-->>Public: "⚠️ Limit Chat Anda Habis! Reset besok 00:00 WIB"
+    end
 ```
 
 ---
 
-## 🌟 Keunggulan Utama
+## 🌐 Mengapa Menggunakan WhatsApp WebSocket (Baileys)?
+
+Bot ini dibangun menggunakan **`@whiskeysockets/baileys`**, pustaka native yang berkomunikasi langsung dengan server WhatsApp melalui protokol **WebSocket murni (`wss://web.whatsapp.com/ws/chat`)** dengan serialisasi binary **Protocol Buffers (Protobuf)**.
+
+### 🚀 Keunggulan WhatsApp WebSocket Dibandingkan Browser Automation (Puppeteer / Selenium):
+1. **Sangat Ringan (Super Low RAM):**
+   - Baileys hanya memakan RAM sekitar **~40 MB – 60 MB**, sangat ideal untuk VPS / RDP berkapasitas RAM 512 MB – 1 GB.
+   - Puppeteer atau Selenium membutuhkan browser Chromium utuh yang mengonsumsi **500 MB – 1 GB+ RAM** dan beban CPU tinggi.
+2. **Headless & Ramah Cloud:**
+   - Tidak memerlukan GUI atau display server (Xvfb) sama sekali. Berjalan mulus di server Linux (Ubuntu, Debian, CentOS) maupun Windows Server / RDP.
+3. **Mendukung Fitur Pesan Bergerak (In-Place Edit / Dynamic Animation):**
+   - Protokol WebSocket WhatsApp mendukung pengubahan konten pesan yang sudah terkirim secara langsung via `sock.sendMessage(jid, { text, edit: messageKey })`.
+   - **Fitur ini memungkinkan pembuatan animasi interaktif**, seperti:
+     - Indikator progres realtime (misalnya: status kompilasi file, progress bar download/build).
+     - **Minigame Interaktif Bergerak**: Game Tic-Tac-Toe, Ular Tangga, Snake, Slot Machine, atau Catur yang merender papan permainan langsung di pesan yang sama tanpa perlu spam pesan baru.
+
+---
+
+## 🌟 Fitur & Keunggulan Utama
 
 1. **⚡ Tanpa Butuh API Key Berbayar (Google AI Studio):**
-   - Bot langsung terhubung ke binary **Antigravity CLI (`agy.exe`)** di laptop/server.
-   - Menggunakan akun Google / Gemini Pro yang sudah aktif dan terautentikasi di laptop.
-   - Tidak memerlukan langganan credit API tambahan.
+   - Bot langsung terhubung ke binary **Antigravity CLI (`agy`)** di server.
+   - Menggunakan akun Google / model AI yang sudah aktif dan terautentikasi di server.
+   - Tidak memerlukan langganan credit API berbayar per-token.
 
-2. **🧠 Multi-Turn Conversation & Full Workspace Access:**
+2. **🔋 Sistem Kuota & Upgrade Limit untuk Pengguna Publik:**
+   - Bot memiliki fitur **Mode Selfbot** (`!selfbot on/off`).
+   - Saat selfbot dimatikan (`!selfbot off`), pengguna lain dapat mencoba chat dengan AI secara publik.
+   - Setiap pengguna non-owner dibatasi oleh kuota harian (default: 10 chat/hari) yang di-reset otomatis setiap pukul 00:00 WIB.
+   - Owner dapat meng-upgrade atau menambah kuota nomor tertentu secara langsung lewat chat (`!setlimit` dan `!addlimit`).
+
+3. **🧠 Multi-Turn Conversation & Akses Workspace Penuh:**
    - Antigravity mengingat riwayat percakapan secara otomatis (flag `-c`).
-   - Dapat membaca file, memeriksa bug, menjalankan script, dan menganalisis kode proyek di laptop langsung dari chat WhatsApp.
+   - Dapat membaca file, memeriksa bug, menjalankan script, dan menganalisis kode proyek di server langsung dari WhatsApp.
 
-3. **💻 Remote PowerShell & File Explorer:**
-   - Jalankan perintah PowerShell di laptop via `!sh <command>`.
-   - Navigasi folder dan baca file: `!cd`, `!pwd`, `!ls`, `!cat`.
-   - Pantau spesifikasi laptop/server: `!status` (CPU, RAM, Uptime).
+4. **💻 Remote Terminal & File Explorer (Owner Only):**
+   - Jalankan perintah shell / command-line langsung di server via `!sh <perintah>`.
+   - Navigasi direktori dan baca file: `!cd`, `!pwd`, `!ls`, `!cat`.
+   - Pantau spesifikasi server: `!status` (CPU, RAM, Uptime, Hostname).
 
-4. **🔒 Keamanan Terkunci (Owner Only):**
-   - Mode selfbot memastikan hanya nomor pemilik (dan nomor yang diizinkan via `!adduser`) yang dapat mengontrol bot.
+5. **👁️ Auto-Read Chat (Silent Notifications):**
+   - Fitur `!autoread on` untuk otomatis menandai pesan masuk sebagai terbaca (centang biru), mencegah tumpukan notifikasi di HP pengguna.
 
-5. **🔑 Pairing Code 8-Digit (Tanpa Scan Kamera):**
+6. **🔑 Pairing Code 8-Digit (Tanpa Scan Kamera):**
    - Cukup masukkan 8 karakter kode pairing di WhatsApp HP Anda -> **Perangkat Tertaut** -> **Tautkan dengan nomor telepon**.
-
-6. **🌐 Realtime WebSocket Monitoring:**
-   - Menyediakan WebSocket server ringan (port `8765`) untuk monitoring aktivitas bot secara realtime dari client eksternal.
+   - Sangat mudah dipasangkan di VPS / RDP tanpa perlu membuka QR gambar.
 
 ---
 
@@ -98,8 +138,8 @@ sequenceDiagram
 
 ### 1. Prasyarat
 - **Node.js** v18+ atau v20+
-- **Antigravity CLI (`agy`)** terinstall di laptop / environment
-- Koneksi Internet
+- **Git**
+- **Antigravity CLI (`agy`)** terinstall dan terautentikasi di VPS, RDP, atau Mesin Lokal
 
 ### 2. Clone Repository
 ```bash
@@ -114,68 +154,89 @@ npm install
 
 ### 4. Konfigurasi Lingkungan (`.env`)
 Salin file template `.env.example` ke `.env`:
-```powershell
+```bash
+# Di Linux / VPS:
+cp .env.example .env
+
+# Di Windows / PowerShell:
 Copy-Item .env.example .env
 ```
+
 Buka file `.env` dan sesuaikan nilainya:
 ```env
-# Nomor WhatsApp Pemilik (Gunakan format 628xxxxxxxxxx tanpa +)
+# Nomor WhatsApp Pemilik (Gunakan format 628xxxxxxxxxx tanpa tanda +)
 OWNER_NUMBER=6281234567890
 
-# Nomor WhatsApp yang digunakan sebagai Bot
+# Nomor WhatsApp yang digunakan sebagai Akun Bot
 BOT_NUMBER=6289876543210
 
-# Mode Selfbot (true = hanya respons Owner)
+# Mode Selfbot (true = hanya respons Owner, false = publik dengan sistem kuota)
 SELFBOT_MODE=true
 
-# Mode Pairing Code (true = pairing via kode 8 digit)
+# Mode Pairing Code (true = pairing via kode 8 digit tanpa QR)
 USE_PAIRING_CODE=true
 
 # Prefix perintah terminal & kontrol
 COMMAND_PREFIX=!
 
-# Folder kerja default untuk PowerShell & Antigravity
-DEFAULT_CWD=C:\Users\Administrator\Downloads\bot-rcon
+# Folder kerja default untuk Terminal & Antigravity
+DEFAULT_CWD=/root/workspace
 
-# Path binary agy.exe
-AGY_PATH=C:\Users\Administrator\AppData\Local\agy\bin\agy.exe
+# Path binary agy (sesuaikan path di VPS Linux atau Windows Server)
+# Linux: /usr/local/bin/agy atau /root/.agy/bin/agy
+# Windows: C:\Users\Administrator\AppData\Local\agy\bin\agy.exe
+AGY_PATH=agy
 ```
 
-### 5. Jalankan Bot
+### 5. Menjalankan Bot
 ```bash
+# Menjalankan langsung:
 npm start
+
+# Atau menjalankan sebagai background service (disarankan untuk VPS menggunakan PM2):
+npm install -g pm2
+pm2 start index.js --name "wa-ai-agent"
+pm2 save
 ```
 
 ### 6. Hubungkan Akun WhatsApp (Pairing)
-1. Terminal akan menampilkan **8 karakter Kode Pairing** (contoh: `ABCD-1234`).
+1. Terminal / log akan menampilkan **8 karakter Kode Pairing** (contoh: `ABCD-1234`).
 2. Di aplikasi WhatsApp ponsel Anda:
-   - Masuk ke **Menu Titik Tiga** (Android) atau **Pengaturan** (iPhone).
+   - Buka **Menu Titik Tiga** (Android) atau **Pengaturan** (iPhone).
    - Pilih **Perangkat Tertaut (Linked Devices)**.
-   - Ketuk **Tautkan Perangkat** -> pilih opsi **Tautkan dengan nomor telepon saja**.
-   - Masukkan 8 karakter kode pairing yang tampil di terminal.
-3. Selesai! Bot WhatsApp Anda aktif dan kredensial tersimpan di folder `session/`.
+   - Ketuk **Tautkan Perangkat** -> pilih tautan **Tautkan dengan nomor telepon saja**.
+   - Masukkan 8 karakter kode pairing yang tampil di log terminal.
+3. Bot WhatsApp langsung aktif dan sesi login disimpan di folder `session/`.
 
 ---
 
 ## 📖 Daftar Perintah (Command List)
 
+### 👥 Perintah Umum & Publik
 | Perintah | Deskripsi |
 |---|---|
-| *(Pesan teks biasa)* | **Langsung ngeprompt Antigravity AI** (mengingat konteks percakapan) |
+| *(Pesan teks biasa)* | Chat langsung dengan AI Antigravity (mengingat konteks percakapan) |
 | `!help` | Menampilkan panduan dan daftar perintah |
-| `!status` | Cek status laptop (CPU, RAM, Uptime, status model AI) |
-| `!new` / `!reset` | Reset konteks sesi percakapan untuk memulai topik baru |
-| `!models` | Lihat daftar model AI yang tersedia di Antigravity |
-| `!model <nama>` | Ganti model AI aktif (contoh: `!model gemini-3.1-pro-high`) |
-| `!stop` | Batalkan eksekusi task Antigravity yang sedang berlangsung |
-| `!sh <command>` | Eksekusi perintah PowerShell langsung di laptop |
-| `!cd <folder>` | Pindah folder kerja aktif |
-| `!pwd` | Cek path direktori kerja aktif |
-| `!ls` | Tampilkan daftar file & folder di direktori aktif |
-| `!cat <file>` | Baca isi file teks |
-| `!selfbot on/off` | Mode selfbot (hanya balas chat owner) |
-| `!autoread on/off` | Otomatis baca chat masuk (hilangkan notifikasi & centang biru di HP) |
-| `!adduser <nomor>` | Tambahkan nomor admin tambahan |
+| `!limit` / `!ceklimit` | Cek sisa kuota chat harian akun Anda |
+| `!status` | Cek status server (RAM, CPU, Hostname, Uptime, status model AI) |
+
+### 👑 Perintah Khusus Owner / Administrator
+| Perintah | Deskripsi |
+|---|---|
+| `!selfbot on / off` | Mengaktifkan/menonaktifkan mode private (hanya membalas Owner) |
+| `!autoread on / off` | Otomatis baca chat masuk (menghilangkan notifikasi HP) |
+| `!setlimit <nomor> <max>` | Mengubah limit kuota harian nomor tertentu (contoh: `!setlimit 628123456789 50`) |
+| `!addlimit <nomor> <bonus>` | Menambahkan bonus kuota chat ke nomor tertentu (contoh: `!addlimit 628123456789 25`) |
+| `!adduser <nomor>` | Menambahkan nomor admin/owner baru |
+| `!new` / `!reset` | Mereset konteks sesi percakapan untuk memulai topik baru |
+| `!models` | Melihat daftar model AI yang tersedia di Antigravity |
+| `!model <0-5>` | Mengganti model AI aktif (contoh: `!model 1` untuk Gemini Flash) |
+| `!stop` | Membatalkan eksekusi task AI yang sedang berjalan di background |
+| `!sh <perintah>` | Menjalankan perintah terminal/shell langsung di server |
+| `!cd <folder>` | Berpindah direktori kerja aktif di server |
+| `!pwd` | Menampilkan path direktori kerja aktif |
+| `!ls` | Menampilkan daftar file & folder di direktori aktif |
+| `!cat <file>` | Membaca isi file teks di server |
 
 ---
 
@@ -184,25 +245,28 @@ npm start
 ```
 bot-wa-antigravity-ai/
 ├── src/
-│   ├── ai.js           # Google Gemini direct fallback engine
-│   ├── antigravity.js    # Core bridge ke Antigravity CLI (agy.exe)
-│   ├── commands.js       # Handler command router & logic
-│   ├── terminal.js       # Controller PowerShell & file explorer
-│   ├── websocket.js      # WebSocket server untuk realtime event
-│   └── whatsapp.js       # Baileys WhatsApp client & auth handler
-├── config.js             # Konfigurasi aplikasi
+│   ├── ai.js           # Fallback direct Gemini engine
+│   ├── antigravity.js    # Bridge komunikasi ke Antigravity CLI (agy)
+│   ├── commands.js       # Router perintah, otorisasi, & logika eksekusi
+│   ├── limits.js         # Engine kuota harian & rate limiting pengguna
+│   ├── terminal.js       # Controller terminal OS (Linux bash / Windows PS)
+│   ├── websocket.js      # WebSocket server untuk realtime event broadcast
+│   └── whatsapp.js       # Baileys native WebSocket client & pairing handler
+├── config.js             # Loader konfigurasi lingkungan (.env)
 ├── index.js              # Entry point utama aplikasi
-├── package.json          # Manifest dependensi & script
-├── .env.example          # Template konfigurasi environment
-├── .gitignore            # Filter file sensitif & session
-└── README.md             # Dokumentasi lengkap & flowchart
+├── package.json          # Manifest dependensi & script runner
+├── .env.example          # Template konfigurasi environment aman
+├── .gitignore            # Filter pengabaian session, data kuota, & .env
+└── README.md             # Dokumentasi lengkap sistem
 ```
 
 ---
 
 ## 🛡️ Keamanan & Privasi
-- File kredensial sesi (`session/`) dan environment (`.env`) diabaikan oleh `.gitignore` dan tidak akan ter-commit ke repository.
-- Seluruh eksekusi shell dibatasi ketat berdasarkan validasi nomor Owner / Admin terdaftar.
+
+- **Zero Credential Leaks:** File sesi login (`session/`), basis data kuota (`data/`), dan file environment (`.env`) secara ketat diabaikan oleh `.gitignore` sehingga aman dari kebocoran ke GitHub.
+- **Terminal Execution Security:** Eksekusi perintah terminal (`!sh`, `!cd`, `!cat`) hanya dapat diakses oleh nomor Owner yang telah diverifikasi melalui JID/LID resmi WhatsApp.
+- **Rate Limit Protection:** Kuota per-user mencegah server kehabisan resource saat bot dibuka untuk umum (`!selfbot off`).
 
 ---
 

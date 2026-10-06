@@ -254,12 +254,16 @@ async function startWhatsAppBot() {
       console.log(`[WA Incoming] From: ${senderPhone} (${senderJid}) | fromMe: ${Boolean(msg.key.fromMe)} | Text: "${text.substring(0, 50)}"`);
 
       const isAuthorized = commands.isAuthorized(senderPhone, senderJid, Boolean(msg.key.fromMe));
-      const isLongTask = isAuthorized && (
+      const isPublicAllowed = !commands.getSelfbotMode();
+      const canProceed = isAuthorized || isPublicAllowed;
+      const isLongTask = canProceed && (
         !text.startsWith(config.prefix) ||
         text.startsWith(`${config.prefix}ai `) ||
-        text.startsWith(`${config.prefix}sh `) ||
-        text.startsWith(`${config.prefix}exec `) ||
-        text.startsWith(`${config.prefix}new `)
+        (isAuthorized && (
+          text.startsWith(`${config.prefix}sh `) ||
+          text.startsWith(`${config.prefix}exec `) ||
+          text.startsWith(`${config.prefix}new `)
+        ))
       );
 
       let loadingMsg = null;

@@ -1,5 +1,7 @@
 node_modules/
 session/
+data/
+limits.json
 .env
 *.log
 .DS_Store

@@ -3,6 +3,7 @@ const path = require('path');
 const config = require('../config');
 const terminal = require('./terminal');
 const antigravity = require('./antigravity');
+const limits = require('./limits');
 
 // Allow dynamically added owners
 const authorizedUsers = new Set(config.owners);
@@ -66,47 +67,108 @@ async function handleMessage(senderPhone, messageText, senderJid, isFromMe = fal
   const text = (messageText || '').trim();
   if (!text) return null;
 
-  // Authorization check
-  if (!isAuthorized(senderPhone, senderJid, isFromMe)) {
-    // If in selfbot mode, completely ignore strangers (silent drop)
-    if (isSelfbot) {
-      console.log(`[Selfbot Ignored] Pesan dari nomor tak dikenal (${senderPhone}) diabaikan.`);
-      return null;
-    }
-    return '⛔ *Akses Ditolak*\nNomor Anda belum terdaftar sebagai pemilik laptop / bot ini.\nHubungi administrator untuk menambahkan nomor Anda.';
-  }
-
   const prefix = config.prefix;
+  const isOwnerUser = isAuthorized(senderPhone, senderJid, isFromMe);
+
+  // If in Selfbot mode, strictly ignore non-owners silently
+  if (!isOwnerUser && isSelfbot) {
+    console.log(`[Selfbot Ignored] Pesan dari nomor non-owner (${senderPhone}) diabaikan karena Selfbot Mode aktif.`);
+    return null;
+  }
 
   // 1. HELP / MENU
   if (text === `${prefix}help` || text === `${prefix}menu`) {
-    return `🤖 *${config.botName.toUpperCase()}*
-_Bridge WhatsApp ➔ Antigravity Laptop & Terminal_
+    let helpText = `🤖 *${config.botName.toUpperCase()}*
+_Cloud & Local Server Controller with AI Engine_
 
 💡 *Cara Menggunakan:*
-Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI Antigravity di laptop Anda!
+Ketik pertanyaan langsung *tanpa tanda seru* untuk chat dengan AI!
 
-🧠 *Kontrol AI Antigravity:*
-• \`${prefix}new\` / \`${prefix}reset\` : Mulai percakapan baru (reset konteks)
-• \`${prefix}models\` : Cek daftar model AI yang tersedia di laptop
-• \`${prefix}model <nama>\` : Ganti model (cth: \`gemini-3.1-pro-high\`)
+📊 *Info & Kuota:*
+• \`${prefix}status\` : Cek RAM, CPU, OS & Uptime server
+• \`${prefix}limit\` : Cek sisa kuota chat AI Anda`;
+
+    if (isOwnerUser) {
+      helpText += `\n\n👑 *Menu Khusus Owner / Admin:*
+🧠 *AI Control:*
+• \`${prefix}new\` / \`${prefix}reset\` : Reset percakapan baru
+• \`${prefix}model <0-5>\` : Ganti model AI (cth: \`${prefix}model 1\`)
 • \`${prefix}stop\` : Batalkan proses AI yang sedang berjalan
 
-💻 *Terminal & PowerShell:*
-• \`${prefix}sh <perintah>\` : Jalankan PowerShell langsung di laptop
-• \`${prefix}cd <folder>\` : Pindah folder kerja aktif
-• \`${prefix}pwd\` : Cek path folder aktif saat ini
-• \`${prefix}ls\` : Lihat daftar file di folder aktif
-• \`${prefix}cat <file>\` : Baca isi file
-• \`${prefix}status\` : Cek RAM, CPU, Uptime laptop
+💻 *Terminal & Shell:*
+• \`${prefix}sh <perintah>\` : Jalankan perintah terminal / shell
+• \`${prefix}cd <folder>\` : Pindah folder aktif
+• \`${prefix}pwd\` / \`${prefix}ls\` / \`${prefix}cat\` : Manajemen file
 
-🔒 *Keamanan & Pengaturan:*
-• \`${prefix}selfbot on/off\` : Mode selfbot (hanya balas owner)
-• \`${prefix}autoread on/off\` : Otomatis baca pesan & hilangkan notif HP
-• \`${prefix}adduser <nomor>\` : Beri akses admin ke nomor lain`;
+🔒 *Pengaturan & Limit User:*
+• \`${prefix}selfbot on/off\` : Mode private (hanya balas owner)
+• \`${prefix}autoread on/off\` : Otomatis baca chat & hilangkan notif
+• \`${prefix}setlimit <nomor> <jumlah>\` : Setel limit harian user
+• \`${prefix}addlimit <nomor> <jumlah>\` : Tambah kuota chat user
+• \`${prefix}adduser <nomor>\` : Jadikan admin / owner baru`;
+    } else {
+      helpText += `\n\n_Anda berada dalam mode Pengguna Publik dengan kuota chat harian._`;
+    }
+
+    return helpText;
   }
 
-  // 2. SELFBOT TOGGLE
+  // 2. CHECK LIMIT (Accessible to everyone)
+  if (text === `${prefix}limit` || text === `${prefix}ceklimit`) {
+    return limits.getLimitInfo(senderPhone, isOwnerUser);
+  }
+
+  // 3. SYSTEM STATUS (Accessible to everyone, sanitized paths in public)
+  if (text === `${prefix}status`) {
+    const s = terminal.getSystemStatus();
+    const busy = antigravity.isAgentBusy() ? '⏳ Sedang Bekerja' : '🟢 Siap (Idle)';
+    const model = antigravity.getModel();
+
+    const isGroup = Boolean(senderJid && (senderJid.endsWith('@g.us') || senderJid.includes('@g.us')));
+    const showCwd = isOwnerUser && !isGroup && isSelfbot;
+
+    let reply = `📊 *STATUS SERVER & AI*
+─────────────────────────
+🖥️ *Host:* ${s.hostname}
+🐧 *OS:* ${s.os || 'Debian 12'}
+⚡ *CPU:* ${s.cpus}
+💾 *RAM:* ${s.memory}
+⏱️ *Uptime:* ${s.systemUptime}
+🤖 *AI Engine:* ${busy}
+🎯 *Model Aktif:* ${model}
+🔒 *Selfbot:* ${isSelfbot ? 'Aktif (Owner Only)' : 'Nonaktif (Publik)'}
+👁️ *Auto-Read:* ${isAutoRead ? 'Aktif' : 'Nonaktif'}`;
+
+    if (showCwd) {
+      reply += `\n📁 *Workspace:*\n\`${s.cwd}\``;
+    }
+
+    return reply;
+  }
+
+  // RESTRICTED COMMANDS (Owner Only)
+  if (!isOwnerUser) {
+    if (text.startsWith(prefix)) {
+      return `⛔ *Akses Terbatas*\nPerintah \`${text.split(' ')[0]}\` hanya dapat dijalankan oleh Administrator/Owner bot.\nKetik \`${prefix}help\` atau langsung kirim pesan biasa untuk chat dengan AI.`;
+    }
+  }
+
+  // 4. OWNER: UPGRADE / SET LIMIT
+  if (text.startsWith(`${prefix}setlimit `)) {
+    const parts = text.substring(10).trim().split(/\s+/);
+    if (parts.length < 2) return `⚠️ Format salah. Contoh: \`${prefix}setlimit 628123456789 50\``;
+    const res = limits.setLimit(parts[0], parts[1]);
+    return `✅ *Limit User Berhasil Diubah:*\n• Nomor: *${res.phone}*\n• Max Kuota: *${res.max} chat/hari*\n• Terpakai: ${res.used}`;
+  }
+
+  if (text.startsWith(`${prefix}addlimit `)) {
+    const parts = text.substring(10).trim().split(/\s+/);
+    if (parts.length < 2) return `⚠️ Format salah. Contoh: \`${prefix}addlimit 628123456789 20\``;
+    const res = limits.addLimit(parts[0], parts[1]);
+    return `✅ *Kuota User Berhasil Ditambahkan:*\n• Nomor: *${res.phone}*\n• Tambahan: +${res.added} chat\n• Total Kuota Baru: *${res.max} chat/hari*`;
+  }
+
+  // 5. OWNER: SELFBOT TOGGLE
   if (text === `${prefix}selfbot` || text === `${prefix}selfbot status`) {
     return `🔒 *Status Mode Selfbot:* ${isSelfbot ? '🟢 AKTIF (Hanya merespons Owner)' : '⚪ NONAKTIF (Publik)'}\n\n_Ketik \`${prefix}selfbot on\` atau \`${prefix}selfbot off\` untuk mengubah._`;
   }
@@ -116,10 +178,10 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
   }
   if (text === `${prefix}selfbot off`) {
     setSelfbotMode(false);
-    return '🔓 *Mode Selfbot DINONAKTIFKAN!* Bot sekarang akan merespons pesan publik (menolak akses non-owner).';
+    return '🔓 *Mode Selfbot DINONAKTIFKAN!* Mode publik aktif. Orang lain dapat mencoba chat AI dengan sistem kuota harian.';
   }
 
-  // 2b. AUTOREAD TOGGLE
+  // 6. OWNER: AUTOREAD TOGGLE
   if (text === `${prefix}autoread` || text === `${prefix}autoread status`) {
     return `👁️ *Status Auto-Read:* ${isAutoRead ? '🟢 AKTIF (Otomatis baca pesan & hilangkan notif HP)' : '⚪ NONAKTIF'}\n\n_Ketik \`${prefix}autoread on\` atau \`${prefix}autoread off\` untuk mengubah._`;
   }
@@ -132,50 +194,20 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
     return '👁️ *Auto-Read DINONAKTIFKAN!* Pesan masuk tidak akan otomatis ditandai terbaca.';
   }
 
-  // 3. SYSTEM STATUS
-  if (text === `${prefix}status`) {
-    const s = terminal.getSystemStatus();
-    const busy = antigravity.isAgentBusy() ? '⏳ Sedang Bekerja' : '🟢 Siap (Idle)';
-    const model = antigravity.getModel();
-
-    const isGroup = Boolean(senderJid && (senderJid.endsWith('@g.us') || senderJid.includes('@g.us')));
-    const isOwnerUser = Boolean(isFromMe || isAuthorized(senderPhone, senderJid, isFromMe));
-    // Sembunyikan direktori aktif jika di grup / publik, hanya tampil untuk owner di private chat
-    const showCwd = isOwnerUser && !isGroup;
-
-    let reply = `📊 *STATUS LAPTOP & ANTIGRAVITY*
-─────────────────────────
-🖥️ *Host:* ${s.hostname}
-🐧 *OS:* ${s.os || 'Debian 12'}
-⚡ *CPU:* ${s.cpus}
-💾 *RAM:* ${s.memory}
-⏱️ *Uptime:* ${s.systemUptime}
-🤖 *Antigravity:* ${busy}
-🎯 *Model Aktif:* ${model}
-🔒 *Selfbot:* ${isSelfbot ? 'Aktif (Owner Only)' : 'Nonaktif'}
-👁️ *Auto-Read:* ${isAutoRead ? 'Aktif (Notif HP Dibersihkan)' : 'Nonaktif'}`;
-
-    if (showCwd) {
-      reply += `\n📁 *Direktori Aktif:*\n\`${s.cwd}\``;
-    }
-
-    return reply;
-  }
-
-  // 4. STOP / CANCEL PROCESS
+  // 7. OWNER: STOP PROCESS
   if (text === `${prefix}stop` || text === `${prefix}cancel`) {
     const stopped = antigravity.stopActiveProcess();
     if (stopped) {
-      return '🛑 *Proses Antigravity berhasil dihentikan!*';
+      return '🛑 *Proses AI berhasil dihentikan!*';
     } else {
-      return 'ℹ️ Tidak ada proses Antigravity yang sedang berjalan saat ini.';
+      return 'ℹ️ Tidak ada proses AI yang sedang berjalan saat ini.';
     }
   }
 
-  // 5. RESET CONVERSATION
+  // 8. OWNER: RESET CONVERSATION
   if (text === `${prefix}new` || text === `${prefix}reset`) {
     antigravity.resetConversation();
-    return '🧹 *Konteks percakapan direset!* Percakapan baru dengan Antigravity telah dimulai.';
+    return '🧹 *Konteks percakapan direset!* Percakapan baru telah dimulai.';
   }
   if (text.startsWith(`${prefix}new `)) {
     antigravity.resetConversation();
@@ -188,12 +220,10 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
     return '🧹 *Konteks percakapan direset!* Silakan kirim pesan berikutnya.';
   }
 
-  // 6. LIST MODELS
+  // 9. OWNER: LIST & SET MODELS
   if (text === `${prefix}models`) {
     return antigravity.getAvailableModelsMenu();
   }
-
-  // 7. SET MODEL
   if (text.startsWith(`${prefix}model `) || text === `${prefix}model`) {
     const m = text.substring(6).trim();
     if (!m) return antigravity.getAvailableModelsMenu();
@@ -201,19 +231,18 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
     return `✅ *Model AI Disetel:*\n${res.label}\n\n_Untuk kembali ke otomatis, ketik \`${prefix}model 0\`._`;
   }
 
-  // 8. ADD AUTHORIZED USER
+  // 10. OWNER: ADD AUTHORIZED USER
   if (text.startsWith(`${prefix}adduser `)) {
     const num = text.substring(`${prefix}adduser `.length).trim();
     const added = addAuthorizedUser(num);
-    return `✅ Nomor *${added}* telah ditambahkan sebagai pengguna berwenang!`;
+    return `✅ Nomor *${added}* telah ditambahkan sebagai pengguna berwenang (Owner/Admin)!`;
   }
 
-  // 9. TERMINAL: PWD
+  // 11. OWNER: TERMINAL (PWD, CD, LS, CAT, SH)
   if (text === `${prefix}pwd`) {
     return `📁 *Direktori Aktif:*\n\`${terminal.getCwd()}\``;
   }
 
-  // 10. TERMINAL: CD
   if (text.startsWith(`${prefix}cd `) || text === `${prefix}cd`) {
     const target = text.substring(3).trim();
     const res = terminal.setCwd(target || '.');
@@ -224,7 +253,6 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
     }
   }
 
-  // 11. TERMINAL: LS / DIR
   if (text === `${prefix}ls` || text === `${prefix}dir`) {
     const cwd = terminal.getCwd();
     try {
@@ -248,7 +276,6 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
     }
   }
 
-  // 12. TERMINAL: CAT / READ FILE
   if (text.startsWith(`${prefix}cat `)) {
     const fileName = text.substring(`${prefix}cat `.length).trim();
     const filePath = path.resolve(terminal.getCwd(), fileName);
@@ -262,16 +289,15 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
     }
   }
 
-  // 13. TERMINAL: RUN SHELL / EXEC
   if (text.startsWith(`${prefix}sh `) || text.startsWith(`${prefix}exec `)) {
     const cmd = text.startsWith(`${prefix}sh `) ? text.substring(4) : text.substring(6);
-    if (!cmd.trim()) return '⚠️ Masukkan perintah PowerShell yang ingin dijalankan.';
+    if (!cmd.trim()) return '⚠️ Masukkan perintah shell yang ingin dijalankan.';
 
     const start = Date.now();
     const result = await terminal.executeCommand(cmd);
     const duration = ((Date.now() - start) / 1000).toFixed(2);
 
-    let reply = `⚡ *PowerShell Execution (${duration}s)*\n\`${terminal.getCwd()}\`\n\n`;
+    let reply = `⚡ *Terminal Execution (${duration}s)*\n\`${terminal.getCwd()}\`\n\n`;
     if (result.stdout) {
       reply += `*STDOUT:*\n\`\`\`\n${result.stdout}\n\`\`\`\n`;
     }
@@ -284,7 +310,7 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
     return reply;
   }
 
-  // 14. PROMPT ANTIGRAVITY (via !ai or regular chat message)
+  // 12. PROMPT AI (via !ai or regular chat message)
   let promptQuery = text;
   if (text.startsWith(`${prefix}ai `)) {
     promptQuery = text.substring(4).trim();
@@ -292,17 +318,32 @@ Kirim pesan teks biasa *tanpa tanda seru* untuk langsung berinteraksi dengan AI 
     return `❓ Perintah *${text}* tidak dikenal. Ketik \`${prefix}help\` untuk melihat daftar perintah.`;
   }
 
-  // Send prompt directly to Antigravity CLI on the laptop
+  // Rate Limiting Check for non-owner
+  let limitCheck = null;
+  if (!isOwnerUser) {
+    limitCheck = limits.checkAndConsume(senderPhone, false);
+    if (!limitCheck.allowed) {
+      return `⚠️ *Limit Chat AI Anda Habis!*\n\nQuota gratis harian Anda (*${limitCheck.max}/${limitCheck.max} chat*) sudah habis untuk hari ini.\n\n🔄 Quota akan otomatis di-reset besok pukul 00:00 WIB.\n💡 Hubungi Owner bot untuk melakukan *upgrade limit* akun Anda!`;
+    }
+  }
+
+  // Send prompt directly to Antigravity CLI
   const result = await antigravity.askAntigravity(promptQuery, {
     cwd: terminal.getCwd(),
   });
 
-  // Result chunks (supports long responses)
+  // Attach quota notice for non-owner users
+  const quotaNotice = (!isOwnerUser && limitCheck)
+    ? `\n\n_🔋 Sisa quota Anda: ${limitCheck.remaining} chat hari ini (Ketik \`${prefix}limit\` untuk cek)._`
+    : '';
+
   if (result.chunks && result.chunks.length > 1) {
+    const lastIdx = result.chunks.length - 1;
+    result.chunks[lastIdx] += quotaNotice;
     return result.chunks;
   }
 
-  return result.text;
+  return result.text + quotaNotice;
 }
 
 module.exports = {
