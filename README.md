@@ -219,6 +219,7 @@ pm2 save
 | `!help` | Menampilkan panduan dan daftar perintah |
 | `!limit` / `!ceklimit` | Cek sisa kuota chat harian akun Anda |
 | `!status` | Cek status server (RAM, CPU, Hostname, Uptime, status model AI) |
+| `!game` / `!miniapp` | Buka HTML5 Mini App Game (Cyber Runner & AI Tic-Tac-Toe) |
 
 ### 👑 Perintah Khusus Owner / Administrator
 | Perintah | Deskripsi |
@@ -244,13 +245,16 @@ pm2 save
 
 ```
 bot-wa-antigravity-ai/
+├── public/
+│   └── game.html       # HTML5 Mini App Arcade Game (Cyber Runner & Tic-Tac-Toe)
 ├── src/
 │   ├── ai.js           # Fallback direct Gemini engine
 │   ├── antigravity.js    # Bridge komunikasi ke Antigravity CLI (agy)
 │   ├── commands.js       # Router perintah, otorisasi, & logika eksekusi
+│   ├── embed.js          # WhatsApp visual embed & card styling engine
 │   ├── limits.js         # Engine kuota harian & rate limiting pengguna
 │   ├── terminal.js       # Controller terminal OS (Linux bash / Windows PS)
-│   ├── websocket.js      # WebSocket server untuk realtime event broadcast
+│   ├── websocket.js      # HTTP Mini App & WebSocket realtime server
 │   └── whatsapp.js       # Baileys native WebSocket client & pairing handler
 ├── config.js             # Loader konfigurasi lingkungan (.env)
 ├── index.js              # Entry point utama aplikasi
@@ -267,14 +271,6 @@ bot-wa-antigravity-ai/
 - **Zero Credential Leaks:** File sesi login (`session/`), basis data kuota (`data/`), dan file environment (`.env`) secara ketat diabaikan oleh `.gitignore` sehingga aman dari kebocoran ke GitHub.
 - **Terminal Execution Security:** Eksekusi perintah terminal (`!sh`, `!cd`, `!cat`) hanya dapat diakses oleh nomor Owner yang telah diverifikasi melalui JID/LID resmi WhatsApp.
 - **Rate Limit Protection:** Kuota per-user mencegah server kehabisan resource saat bot dibuka untuk umum (`!selfbot off`).
-
----
-
-## 🔔 Notifikasi & Webhook
-
-Repository ini telah terintegrasi dengan **Discord Webhook** untuk menyiarkan aktivitas pembaruan kode secara otomatis:
-- **Realtime Commit & Push Alert:** Notifikasi otomatis ke Discord saat ada commit atau push baru di branch `main`.
-- **Release & PR Tracker:** Melacak pembuatan pull request, isu, dan rilis versi baru.
 
 ---
 

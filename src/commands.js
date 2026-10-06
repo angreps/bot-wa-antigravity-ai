@@ -4,6 +4,8 @@ const config = require('../config');
 const terminal = require('./terminal');
 const antigravity = require('./antigravity');
 const limits = require('./limits');
+const embed = require('./embed');
+const websocket = require('./websocket');
 
 // Allow dynamically added owners
 const authorizedUsers = new Set(config.owners);
@@ -78,39 +80,58 @@ async function handleMessage(senderPhone, messageText, senderJid, isFromMe = fal
 
   // 1. HELP / MENU
   if (text === `${prefix}help` || text === `${prefix}menu`) {
-    let helpText = `🤖 *${config.botName.toUpperCase()}*
-_Cloud & Local Server Controller with AI Engine_
-
-💡 *Cara Menggunakan:*
-Ketik pertanyaan langsung *tanpa tanda seru* untuk chat dengan AI!
-
-📊 *Info & Kuota:*
-• \`${prefix}status\` : Cek RAM, CPU, OS & Uptime server
-• \`${prefix}limit\` : Cek sisa kuota chat AI Anda`;
+    const fields = [
+      {
+        title: '💡 Cara Menggunakan',
+        value: 'Ketik pesan apa saja secara langsung tanpa prefix untuk berdiskusi atau meminta bantuan koding & analisis file!',
+      },
+      {
+        title: '📊 Info & Hiburan',
+        value: [
+          `• \`${prefix}status\` : Status server, CPU, RAM, & Uptime`,
+          `• \`${prefix}limit\` : Cek kuota harian chat akun Anda`,
+          `• \`${prefix}game\` : Buka HTML5 Mini App Game WhatsApp`,
+        ].join('\n'),
+      },
+    ];
 
     if (isOwnerUser) {
-      helpText += `\n\n👑 *Menu Khusus Owner / Admin:*
-🧠 *AI Control:*
-• \`${prefix}new\` / \`${prefix}reset\` : Reset percakapan baru
-• \`${prefix}model <0-5>\` : Ganti model AI (cth: \`${prefix}model 1\`)
-• \`${prefix}stop\` : Batalkan proses AI yang sedang berjalan
-
-💻 *Terminal & Shell:*
-• \`${prefix}sh <perintah>\` : Jalankan perintah terminal / shell
-• \`${prefix}cd <folder>\` : Pindah folder aktif
-• \`${prefix}pwd\` / \`${prefix}ls\` / \`${prefix}cat\` : Manajemen file
-
-🔒 *Pengaturan & Limit User:*
-• \`${prefix}selfbot on/off\` : Mode private (hanya balas owner)
-• \`${prefix}autoread on/off\` : Otomatis baca chat & hilangkan notif
-• \`${prefix}setlimit <nomor> <jumlah>\` : Setel limit harian user
-• \`${prefix}addlimit <nomor> <jumlah>\` : Tambah kuota chat user
-• \`${prefix}adduser <nomor>\` : Jadikan admin / owner baru`;
-    } else {
-      helpText += `\n\n_Anda berada dalam mode Pengguna Publik dengan kuota chat harian._`;
+      fields.push(
+        {
+          title: '🧠 AI Controller (Owner)',
+          value: [
+            `• \`${prefix}new\` / \`${prefix}reset\` : Bersihkan konteks & mulai sesi baru`,
+            `• \`${prefix}model <0-5>\` : Ganti model AI aktif`,
+            `• \`${prefix}models\` : Lihat daftar model AI tersedia`,
+            `• \`${prefix}stop\` : Batalkan proses task AI yang berjalan`,
+          ].join('\n'),
+        },
+        {
+          title: '💻 Terminal & Shell (Owner)',
+          value: [
+            `• \`${prefix}sh <perintah>\` : Jalankan perintah terminal`,
+            `• \`${prefix}cd <folder>\` / \`${prefix}pwd\` : Navigasi folder`,
+            `• \`${prefix}ls\` / \`${prefix}cat <file>\` : Manajemen file`,
+          ].join('\n'),
+        },
+        {
+          title: '🔒 Pengaturan & Limit (Owner)',
+          value: [
+            `• \`${prefix}selfbot on/off\` : Mode privat (hanya balas owner)`,
+            `• \`${prefix}autoread on/off\` : Otomatis baca chat masuk`,
+            `• \`${prefix}setlimit / addlimit\` : Atur kuota user publik`,
+            `• \`${prefix}adduser <nomor>\` : Tambah owner baru`,
+          ].join('\n'),
+        }
+      );
     }
 
-    return helpText;
+    return embed.createEmbed({
+      title: '🤖 *ANTIGRAVITY AI ASSISTANT*',
+      subtitle: isOwnerUser ? 'Mode Owner' : 'Mode Publik',
+      fields,
+      footer: 'Google Antigravity Laptop Bridge',
+    });
   }
 
   // 2. CHECK LIMIT (Accessible to everyone)
@@ -118,7 +139,32 @@ Ketik pertanyaan langsung *tanpa tanda seru* untuk chat dengan AI!
     return limits.getLimitInfo(senderPhone, isOwnerUser);
   }
 
-  // 3. SYSTEM STATUS (Accessible to everyone, sanitized paths in public)
+  // 3. MINI APP GAME (Accessible to everyone)
+  if (text === `${prefix}game` || text === `${prefix}miniapp` || text === `${prefix}arcade`) {
+    const urls = websocket.getGameUrl();
+    const stats = websocket.getStats();
+    return embed.createEmbed({
+      title: '🎮 *ANTIGRAVITY MINI APP GAMING*',
+      subtitle: 'HTML5 Web App',
+      body: [
+        'Mainkan game interaktif langsung di browser ponsel Anda!',
+        '',
+        '🕹️ *Pilihan Game:*',
+        '• 🚀 *Cyber Runner* : Lompati laser neon & raih rekor skor',
+        '• 🤖 *AI Tic-Tac-Toe* : Duel strategi melawan Antigravity AI',
+        '',
+        '⚡ *Tautan Game:*',
+        `🔗 *Buka di HP (LAN):* ${urls.lan}`,
+        `💻 *Buka di Laptop:* ${urls.local}`,
+        '',
+        `🏆 *Rekor Cyber Runner:* ${stats.highScores.cyber_runner.score} Pts`,
+        `👥 *Total Dimainkan:* ${stats.totalPlays} kali`,
+      ].join('\n'),
+      footer: 'Sentuh link di atas untuk langsung bermain!',
+    });
+  }
+
+  // 4. SYSTEM STATUS (Accessible to everyone, sanitized paths in public)
   if (text === `${prefix}status`) {
     const s = terminal.getSystemStatus();
     const busy = antigravity.isAgentBusy() ? '⏳ Sedang Bekerja' : '🟢 Siap (Idle)';
@@ -127,87 +173,153 @@ Ketik pertanyaan langsung *tanpa tanda seru* untuk chat dengan AI!
     const isGroup = Boolean(senderJid && (senderJid.endsWith('@g.us') || senderJid.includes('@g.us')));
     const showCwd = isOwnerUser && !isGroup && isSelfbot;
 
-    let reply = `📊 *STATUS SERVER & AI*
-─────────────────────────
-🖥️ *Host:* ${s.hostname}
-🐧 *OS:* ${s.os || 'Debian 12'}
-⚡ *CPU:* ${s.cpus}
-💾 *RAM:* ${s.memory}
-⏱️ *Uptime:* ${s.systemUptime}
-🤖 *AI Engine:* ${busy}
-🎯 *Model Aktif:* ${model}
-🔒 *Selfbot:* ${isSelfbot ? 'Aktif (Owner Only)' : 'Nonaktif (Publik)'}
-👁️ *Auto-Read:* ${isAutoRead ? 'Aktif' : 'Nonaktif'}`;
+    const fields = [
+      {
+        title: '🖥️ Spesifikasi Sistem',
+        value: [
+          `• Host: *${s.hostname}*`,
+          `• OS: ${s.os || 'Debian 12'}`,
+          `• CPU: ${s.cpus}`,
+          `• RAM: ${s.memory}`,
+          `• Uptime: ${s.systemUptime}`,
+        ].join('\n'),
+      },
+      {
+        title: '⚙️ Status Layanan',
+        value: [
+          `• AI Engine: ${busy}`,
+          `• Model Aktif: ${model}`,
+          `• Mode Selfbot: ${isSelfbot ? 'Aktif (Owner Only)' : 'Nonaktif (Publik)'}`,
+          `• Auto-Read: ${isAutoRead ? 'Aktif' : 'Nonaktif'}`,
+          showCwd ? `• Workspace: \`${s.cwd}\`` : '',
+        ].filter(Boolean).join('\n'),
+      },
+    ];
 
-    if (showCwd) {
-      reply += `\n📁 *Workspace:*\n\`${s.cwd}\``;
-    }
-
-    return reply;
+    return embed.createEmbed({
+      title: '📊 *STATUS SERVER & ENGINE*',
+      fields,
+      footer: 'Server Telemetry & Performance',
+    });
   }
 
   // RESTRICTED COMMANDS (Owner Only)
   if (!isOwnerUser) {
     if (text.startsWith(prefix)) {
-      return `⛔ *Akses Terbatas*\nPerintah \`${text.split(' ')[0]}\` hanya dapat dijalankan oleh Administrator/Owner bot.\nKetik \`${prefix}help\` atau langsung kirim pesan biasa untuk chat dengan AI.`;
+      return embed.createEmbed({
+        title: '⛔ *AKSES DITOLAK*',
+        body: `Perintah \`${text.split(' ')[0]}\` khusus Administrator/Owner bot.\nKetik \`${prefix}help\` atau kirim pesan biasa untuk chat dengan AI.`,
+        footer: 'Permission Restricted',
+      });
     }
   }
 
-  // 4. OWNER: UPGRADE / SET LIMIT
+  // 5. OWNER: UPGRADE / SET LIMIT
   if (text.startsWith(`${prefix}setlimit `)) {
     const parts = text.substring(10).trim().split(/\s+/);
-    if (parts.length < 2) return `⚠️ Format salah. Contoh: \`${prefix}setlimit 628123456789 50\``;
+    if (parts.length < 2) return embed.formatAlert('Format Salah', `Contoh penggunaan: \`${prefix}setlimit 628123456789 50\``, 'warning');
     const res = limits.setLimit(parts[0], parts[1]);
-    return `✅ *Limit User Berhasil Diubah:*\n• Nomor: *${res.phone}*\n• Max Kuota: *${res.max} chat/hari*\n• Terpakai: ${res.used}`;
+    return embed.createEmbed({
+      title: '✅ *LIMIT USER DIPERBARUI*',
+      body: [
+        `• Nomor: *${res.phone}*`,
+        `• Kuota Baru: *${res.max} chat/hari*`,
+        `• Terpakai: ${res.used}`,
+      ].join('\n'),
+      footer: 'Quota Updated',
+    });
   }
 
   if (text.startsWith(`${prefix}addlimit `)) {
     const parts = text.substring(10).trim().split(/\s+/);
-    if (parts.length < 2) return `⚠️ Format salah. Contoh: \`${prefix}addlimit 628123456789 20\``;
+    if (parts.length < 2) return embed.formatAlert('Format Salah', `Contoh penggunaan: \`${prefix}addlimit 628123456789 20\``, 'warning');
     const res = limits.addLimit(parts[0], parts[1]);
-    return `✅ *Kuota User Berhasil Ditambahkan:*\n• Nomor: *${res.phone}*\n• Tambahan: +${res.added} chat\n• Total Kuota Baru: *${res.max} chat/hari*`;
+    return embed.createEmbed({
+      title: '✅ *BONUS KUOTA DITAMBAHKAN*',
+      body: [
+        `• Nomor: *${res.phone}*`,
+        `• Tambahan: +${res.added} chat`,
+        `• Total Kuota: *${res.max} chat/hari*`,
+      ].join('\n'),
+      footer: 'Bonus Quota Applied',
+    });
   }
 
-  // 5. OWNER: SELFBOT TOGGLE
+  // 6. OWNER: SELFBOT TOGGLE
   if (text === `${prefix}selfbot` || text === `${prefix}selfbot status`) {
-    return `🔒 *Status Mode Selfbot:* ${isSelfbot ? '🟢 AKTIF (Hanya merespons Owner)' : '⚪ NONAKTIF (Publik)'}\n\n_Ketik \`${prefix}selfbot on\` atau \`${prefix}selfbot off\` untuk mengubah._`;
+    return embed.createEmbed({
+      title: '🔒 *STATUS SELFBOT*',
+      body: `Status: ${isSelfbot ? '🟢 *AKTIF* (Hanya merespons Owner)' : '⚪ *NONAKTIF* (Publik)'}\n\n_Ketik \`${prefix}selfbot on\` atau \`${prefix}selfbot off\` untuk mengubah._`,
+      footer: 'Privacy Controller',
+    });
   }
   if (text === `${prefix}selfbot on`) {
     setSelfbotMode(true);
-    return '🔒 *Mode Selfbot DIAKTIFKAN!* Bot sekarang hanya merespons Owner. Pesan dari orang lain akan diabaikan tanpa balasan.';
+    return embed.createEmbed({
+      title: '🔒 *MODE SELFBOT DIAKTIFKAN*',
+      body: 'Bot sekarang *hanya merespons Owner*. Pesan dari pengguna lain akan diabaikan tanpa balasan.',
+      footer: 'Owner Only Mode Active',
+    });
   }
   if (text === `${prefix}selfbot off`) {
     setSelfbotMode(false);
-    return '🔓 *Mode Selfbot DINONAKTIFKAN!* Mode publik aktif. Orang lain dapat mencoba chat AI dengan sistem kuota harian.';
+    return embed.createEmbed({
+      title: '🔓 *MODE SELFBOT DINONAKTIFKAN*',
+      body: 'Mode publik aktif. Pengguna lain dapat mencoba chat dengan AI menggunakan sistem kuota harian.',
+      footer: 'Public Mode Active',
+    });
   }
 
-  // 6. OWNER: AUTOREAD TOGGLE
+  // 7. OWNER: AUTOREAD TOGGLE
   if (text === `${prefix}autoread` || text === `${prefix}autoread status`) {
-    return `👁️ *Status Auto-Read:* ${isAutoRead ? '🟢 AKTIF (Otomatis baca pesan & hilangkan notif HP)' : '⚪ NONAKTIF'}\n\n_Ketik \`${prefix}autoread on\` atau \`${prefix}autoread off\` untuk mengubah._`;
+    return embed.createEmbed({
+      title: '👁️ *STATUS AUTO-READ*',
+      body: `Status: ${isAutoRead ? '🟢 *AKTIF* (Otomatis baca & centang biru)' : '⚪ *NONAKTIF*'}\n\n_Ketik \`${prefix}autoread on\` atau \`${prefix}autoread off\` untuk mengubah._`,
+      footer: 'Notification Controller',
+    });
   }
   if (text === `${prefix}autoread on`) {
     setAutoRead(true);
-    return '👁️ *Auto-Read DIAKTIFKAN!* Semua pesan masuk akan langsung ditandai terbaca (centang biru) sehingga notifikasi tidak menumpuk di HP.';
+    return embed.createEmbed({
+      title: '👁️ *AUTO-READ DIAKTIFKAN*',
+      body: 'Pesan masuk akan langsung ditandai terbaca (centang biru), mencegah tumpukan notifikasi di HP Anda.',
+      footer: 'Auto-Read Active',
+    });
   }
   if (text === `${prefix}autoread off`) {
     setAutoRead(false);
-    return '👁️ *Auto-Read DINONAKTIFKAN!* Pesan masuk tidak akan otomatis ditandai terbaca.';
+    return embed.createEmbed({
+      title: '👁️ *AUTO-READ DINONAKTIFKAN*',
+      body: 'Pesan masuk tidak akan otomatis ditandai terbaca.',
+      footer: 'Auto-Read Inactive',
+    });
   }
 
-  // 7. OWNER: STOP PROCESS
+  // 8. OWNER: STOP PROCESS
   if (text === `${prefix}stop` || text === `${prefix}cancel`) {
     const stopped = antigravity.stopActiveProcess();
-    if (stopped) {
-      return '🛑 *Proses AI berhasil dihentikan!*';
-    } else {
-      return 'ℹ️ Tidak ada proses AI yang sedang berjalan saat ini.';
-    }
+    return embed.createEmbed({
+      title: stopped ? '🛑 *PROSES DIHENTIKAN*' : 'ℹ️ *TIDAK ADA PROSES*',
+      body: stopped
+        ? 'Eksekusi AI aktif berhasil dihentikan secara paksa.'
+        : 'Tidak ada proses AI yang sedang berjalan saat ini.',
+      footer: 'Process Controller',
+    });
   }
 
-  // 8. OWNER: RESET CONVERSATION
+  // 9. OWNER: RESET CONVERSATION
   if (text === `${prefix}new` || text === `${prefix}reset`) {
     antigravity.resetConversation();
-    return '🧹 *Konteks percakapan direset!* Percakapan baru telah dimulai.';
+    return embed.createEmbed({
+      title: '🧹 *KONTEKS PERCAKAPAN DIRESET*',
+      body: [
+        'Sesi lama telah dibersihkan secara tuntas.',
+        'Sesi baru telah dimulai dan tidak akan terhubung ke riwayat sebelum restart.',
+        '',
+        '💡 _Silakan kirim pertanyaan atau tugas koding berikutnya!_',
+      ].join('\n'),
+      footer: 'Clean New Session Started',
+    });
   }
   if (text.startsWith(`${prefix}new `)) {
     antigravity.resetConversation();
@@ -217,10 +329,14 @@ Ketik pertanyaan langsung *tanpa tanda seru* untuk chat dengan AI!
       if (res.chunks && res.chunks.length > 1) return res.chunks;
       return res.text;
     }
-    return '🧹 *Konteks percakapan direset!* Silakan kirim pesan berikutnya.';
+    return embed.createEmbed({
+      title: '🧹 *KONTEKS PERCAKAPAN DIRESET*',
+      body: 'Sesi baru telah siap. Silakan kirim pesan berikutnya.',
+      footer: 'Fresh Conversation Ready',
+    });
   }
 
-  // 9. OWNER: LIST & SET MODELS
+  // 10. OWNER: LIST & SET MODELS
   if (text === `${prefix}models`) {
     return antigravity.getAvailableModelsMenu();
   }
@@ -228,38 +344,56 @@ Ketik pertanyaan langsung *tanpa tanda seru* untuk chat dengan AI!
     const m = text.substring(6).trim();
     if (!m) return antigravity.getAvailableModelsMenu();
     const res = antigravity.setModel(m);
-    return `✅ *Model AI Disetel:*\n${res.label}\n\n_Untuk kembali ke otomatis, ketik \`${prefix}model 0\`._`;
+    return embed.createEmbed({
+      title: '✅ *MODEL AI DIPERBARUI*',
+      body: `Engine AI aktif: *${res.label}*\n\n_Untuk kembali ke otomatis, ketik \`${prefix}model 0\`._`,
+      footer: 'Model Engine Selected',
+    });
   }
 
-  // 10. OWNER: ADD AUTHORIZED USER
+  // 11. OWNER: ADD AUTHORIZED USER
   if (text.startsWith(`${prefix}adduser `)) {
     const num = text.substring(`${prefix}adduser `.length).trim();
     const added = addAuthorizedUser(num);
-    return `✅ Nomor *${added}* telah ditambahkan sebagai pengguna berwenang (Owner/Admin)!`;
+    return embed.createEmbed({
+      title: '✅ *ADMIN / OWNER DITAMBAHKAN*',
+      body: `Nomor *${added}* kini memiliki hak akses penuh Superuser!`,
+      footer: 'Privilege Granted',
+    });
   }
 
   // 11. OWNER: TERMINAL (PWD, CD, LS, CAT, SH)
   if (text === `${prefix}pwd`) {
-    return `📁 *Direktori Aktif:*\n\`${terminal.getCwd()}\``;
+    return embed.createEmbed({
+      title: '📁 *DIREKTORI AKTIF*',
+      body: `\`${terminal.getCwd()}\``,
+      footer: 'Working Directory',
+    });
   }
 
   if (text.startsWith(`${prefix}cd `) || text === `${prefix}cd`) {
     const target = text.substring(3).trim();
     const res = terminal.setCwd(target || '.');
-    if (res.success) {
-      return `📁 *Direktori diubah ke:*\n\`${res.cwd}\``;
-    } else {
-      return `❌ *Gagal pindah folder:*\n${res.error}`;
-    }
+    return embed.createEmbed({
+      title: res.success ? '📁 *DIREKTORI DIUBAH*' : '❌ *GAGAL PINDAH FOLDER*',
+      body: res.success ? `\`${res.cwd}\`` : res.error,
+      footer: 'Terminal Directory',
+    });
   }
 
   if (text === `${prefix}ls` || text === `${prefix}dir`) {
     const cwd = terminal.getCwd();
     try {
       const files = fs.readdirSync(cwd);
-      if (files.length === 0) return `📁 *Folder Kosong:* \`${cwd}\``;
+      if (files.length === 0) {
+        return embed.createEmbed({
+          title: '📂 *FOLDER KOSONG*',
+          body: `\`${cwd}\``,
+          footer: 'File Explorer',
+        });
+      }
 
-      const fileList = files.slice(0, 35).map(f => {
+      const fileList = files.slice(0, 30).map(f => {
         const full = path.join(cwd, f);
         try {
           const isDir = fs.statSync(full).isDirectory();
@@ -269,10 +403,15 @@ Ketik pertanyaan langsung *tanpa tanda seru* untuk chat dengan AI!
         }
       }).join('\n');
 
-      const extra = files.length > 35 ? `\n\n_...dan ${files.length - 35} file lainnya_` : '';
-      return `📂 *Daftar File di* \`${cwd}\`:\n\n${fileList}${extra}`;
+      const extra = files.length > 30 ? `\n_...dan ${files.length - 30} file lainnya_` : '';
+      return embed.createEmbed({
+        title: '📂 *DAFTAR FILE WORKSPACE*',
+        subtitle: path.basename(cwd),
+        body: `${fileList}${extra}`,
+        footer: `${files.length} Total Item`,
+      });
     } catch (err) {
-      return `❌ *Gagal membaca folder:* ${err.message}`;
+      return embed.formatAlert('Gagal Membaca Folder', err.message, 'error');
     }
   }
 
@@ -280,34 +419,48 @@ Ketik pertanyaan langsung *tanpa tanda seru* untuk chat dengan AI!
     const fileName = text.substring(`${prefix}cat `.length).trim();
     const filePath = path.resolve(terminal.getCwd(), fileName);
     try {
-      if (!fs.existsSync(filePath)) return `❌ File tidak ditemukan: \`${fileName}\``;
+      if (!fs.existsSync(filePath)) return embed.formatAlert('File Tidak Ditemukan', `\`${fileName}\``, 'warning');
       const content = fs.readFileSync(filePath, 'utf8');
-      const truncated = content.length > 3000 ? content.substring(0, 3000) + '\n\n...[Isi dipotong]' : content;
-      return `📄 *Isi File \`${fileName}\`:*\n\`\`\`\n${truncated}\n\`\`\``;
+      const truncated = content.length > 2500 ? content.substring(0, 2500) + '\n\n...[Isi dipotong]' : content;
+      return embed.createEmbed({
+        title: '📄 *ISI FILE*',
+        subtitle: fileName,
+        body: `\`\`\`\n${truncated}\n\`\`\``,
+        footer: 'File Viewer',
+      });
     } catch (err) {
-      return `❌ Gagal membaca file: ${err.message}`;
+      return embed.formatAlert('Gagal Membaca File', err.message, 'error');
     }
   }
 
   if (text.startsWith(`${prefix}sh `) || text.startsWith(`${prefix}exec `)) {
     const cmd = text.startsWith(`${prefix}sh `) ? text.substring(4) : text.substring(6);
-    if (!cmd.trim()) return '⚠️ Masukkan perintah shell yang ingin dijalankan.';
+    if (!cmd.trim()) return embed.formatAlert('Perintah Kosong', 'Masukkan perintah shell yang ingin dijalankan.', 'warning');
 
     const start = Date.now();
     const result = await terminal.executeCommand(cmd);
     const duration = ((Date.now() - start) / 1000).toFixed(2);
 
-    let reply = `⚡ *Terminal Execution (${duration}s)*\n\`${terminal.getCwd()}\`\n\n`;
+    const fields = [];
     if (result.stdout) {
-      reply += `*STDOUT:*\n\`\`\`\n${result.stdout}\n\`\`\`\n`;
+      const out = result.stdout.length > 2500 ? result.stdout.substring(0, 2500) + '\n...[Dipotong]' : result.stdout;
+      fields.push({ title: '📤 STDOUT', value: `\`\`\`\n${out}\n\`\`\`` });
     }
     if (result.stderr) {
-      reply += `*STDERR:*\n\`\`\`\n${result.stderr}\n\`\`\`\n`;
+      const errOut = result.stderr.length > 2500 ? result.stderr.substring(0, 2500) + '\n...[Dipotong]' : result.stderr;
+      fields.push({ title: '⚠️ STDERR', value: `\`\`\`\n${errOut}\n\`\`\`` });
     }
     if (!result.stdout && !result.stderr) {
-      reply += `_Perintah selesai tanpa output (Exit Code: ${result.exitCode})_`;
+      fields.push({ title: 'ℹ️ Output', value: `_Perintah selesai tanpa output (Exit Code: ${result.exitCode})_` });
     }
-    return reply;
+
+    return embed.createEmbed({
+      title: '⚡ *TERMINAL EXECUTION*',
+      subtitle: `${duration}s`,
+      body: `💻 *Cmd:* \`${cmd.trim()}\`\n📁 *Cwd:* \`${terminal.getCwd()}\``,
+      fields,
+      footer: `Exit Code: ${result.exitCode}`,
+    });
   }
 
   // 12. PROMPT AI (via !ai or regular chat message)
@@ -315,7 +468,11 @@ Ketik pertanyaan langsung *tanpa tanda seru* untuk chat dengan AI!
   if (text.startsWith(`${prefix}ai `)) {
     promptQuery = text.substring(4).trim();
   } else if (text.startsWith(prefix)) {
-    return `❓ Perintah *${text}* tidak dikenal. Ketik \`${prefix}help\` untuk melihat daftar perintah.`;
+    return embed.createEmbed({
+      title: '❓ *PERINTAH TIDAK DIKENAL*',
+      body: `Perintah *${text}* tidak terdaftar.\nKetik \`${prefix}help\` untuk melihat daftar perintah yang tersedia.`,
+      footer: 'Command Not Found',
+    });
   }
 
   // Rate Limiting Check for non-owner
@@ -323,7 +480,16 @@ Ketik pertanyaan langsung *tanpa tanda seru* untuk chat dengan AI!
   if (!isOwnerUser) {
     limitCheck = limits.checkAndConsume(senderPhone, false);
     if (!limitCheck.allowed) {
-      return `⚠️ *Limit Chat AI Anda Habis!*\n\nQuota gratis harian Anda (*${limitCheck.max}/${limitCheck.max} chat*) sudah habis untuk hari ini.\n\n🔄 Quota akan otomatis di-reset besok pukul 00:00 WIB.\n💡 Hubungi Owner bot untuk melakukan *upgrade limit* akun Anda!`;
+      return embed.createEmbed({
+        title: '⚠️ *KUOTA CHAT AI ANDA HABIS*',
+        body: [
+          `Kuota gratis harian Anda (*${limitCheck.max}/${limitCheck.max} chat*) sudah habis untuk hari ini.`,
+          '',
+          '🔄 *Reset Otomatis:* Besok pukul 00:00 WIB',
+          '💡 *Upgrade Kuota:* Hubungi Owner bot untuk menambah limit akun Anda!',
+        ].join('\n'),
+        footer: 'Daily Rate Limit Exceeded',
+      });
     }
   }
 

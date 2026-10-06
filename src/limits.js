@@ -108,6 +108,8 @@ function checkAndConsume(phone, isOwner = false) {
   };
 }
 
+const embed = require('./embed');
+
 /**
  * Get formatted limit status string for a user
  * @param {string} phone
@@ -116,7 +118,16 @@ function checkAndConsume(phone, isOwner = false) {
  */
 function getLimitInfo(phone, isOwner = false) {
   if (isOwner) {
-    return `👑 *Status Akun:* Owner / Admin\n♾️ *Quota AI:* Unlimited (Tanpa Batas)`;
+    return embed.createEmbed({
+      title: '👑 *STATUS AKUN & KUOTA*',
+      subtitle: 'Owner Access',
+      body: [
+        '👤 *Peran:* Owner / Super Admin',
+        '♾️ *Kuota AI:* Unlimited (Tanpa Batas)',
+        '💻 *Terminal & Shell:* Akses Penuh Aktif',
+      ].join('\n'),
+      footer: 'Superuser Privileges Active',
+    });
   }
 
   checkDailyReset();
@@ -124,14 +135,19 @@ function getLimitInfo(phone, isOwner = false) {
   const user = db.users[clean] || { used: 0, max: DEFAULT_LIMIT };
   const sisa = Math.max(0, user.max - user.used);
 
-  return `📊 *STATUS QUOTA AI ANDA:*
-─────────────────────────
-📱 *Nomor:* ${clean}
-⚡ *Terpakai:* ${user.used} / ${user.max} chat
-🔋 *Sisa Quota:* *${sisa} chat*
-🔄 *Reset Harian:* Pukul 00:00 WIB
-
-_Jika quota habis, Anda dapat meminta Owner untuk meng-upgrade limit akun Anda._`;
+  return embed.createEmbed({
+    title: '📊 *STATUS KUOTA AI ANDA*',
+    subtitle: 'Public User',
+    body: [
+      `📱 *Nomor:* ${clean}`,
+      `⚡ *Terpakai:* ${user.used} / ${user.max} chat`,
+      `🔋 *Sisa Kuota:* *${sisa} chat*`,
+      '🔄 *Reset Harian:* Pukul 00:00 WIB',
+      '',
+      '_💡 Hubungi Owner bot untuk meminta upgrade kuota harian._',
+    ].join('\n'),
+    footer: 'Daily Rate Limit System',
+  });
 }
 
 /**

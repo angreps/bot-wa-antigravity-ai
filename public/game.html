@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>⚡ Antigravity Mini App Arcade</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card: #151d30;
+      --accent: #00f2fe;
+      --accent2: #4facfe;
+      --neon-pink: #ff2a85;
+      --neon-green: #05ffa1;
+      --text: #e2e8f0;
+      --text-muted: #8492a6;
+      --border: #233152;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      overflow-x: hidden;
+      touch-action: manipulation;
+    }
+
+    /* Header Nav */
+    header {
+      width: 100%;
+      max-width: 480px;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(21, 29, 48, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-icon {
+      font-size: 24px;
+      filter: drop-shadow(0 0 8px var(--accent));
+    }
+
+    .brand-title {
+      font-weight: 800;
+      font-size: 17px;
+      background: linear-gradient(135deg, var(--accent), var(--neon-pink));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 0.5px;
+    }
+
+    .ws-badge {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: #102a27;
+      color: var(--neon-green);
+      border: 1px solid rgba(5, 255, 161, 0.3);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+    }
+
+    .ws-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--neon-green);
+      box-shadow: 0 0 8px var(--neon-green);
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* Container */
+    .container {
+      width: 100%;
+      max-width: 480px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Tabs */
+    .game-tabs {
+      display: flex;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 4px;
+      gap: 4px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 700;
+      font-size: 13px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .tab-btn.active {
+      background: linear-gradient(135deg, #1e3a8a, #0284c7);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+    }
+
+    /* Game View Container */
+    .game-panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .game-panel::before {
+      content: '';
+      position: absolute;
+      top: -50px;
+      right: -50px;
+      width: 120px;
+      height: 120px;
+      background: radial-gradient(circle, rgba(0, 242, 254, 0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    /* Game 1: Canvas Runner */
+    #runnerCanvas {
+      width: 100%;
+      height: 380px;
+      background: #060913;
+      border-radius: 16px;
+      border: 1px solid #1a2744;
+      display: block;
+      touch-action: none;
+    }
+
+    .hud {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding: 4px 6px;
+    }
+
+    .hud-box {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .hud-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .hud-val {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--accent);
+      text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+    }
+
+    .hud-val.pink {
+      color: var(--neon-pink);
+      text-shadow: 0 0 10px rgba(255, 42, 133, 0.5);
+    }
+
+    /* Game Controls */
+    .controls {
+      width: 100%;
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 13px;
+      border: none;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #0b0f19;
+      box-shadow: 0 4px 16px rgba(0, 242, 254, 0.35);
+    }
+
+    .btn-secondary {
+      background: #1c263d;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-pink {
+      background: linear-gradient(135deg, var(--neon-pink), #b91c1c);
+      color: white;
+      box-shadow: 0 4px 16px rgba(255, 42, 133, 0.35);
+    }
+
+    /* Game 2: Tic Tac Toe */
+    #tictactoeView {
+      display: none;
+      width: 100%;
+    }
+
+    .ttt-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      width: 100%;
+      max-width: 300px;
+      margin: 16px auto;
+    }
+
+    .ttt-cell {
+      aspect-ratio: 1;
+      background: #0f1629;
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      font-size: 38px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .ttt-cell:hover, .ttt-cell:active {
+      border-color: var(--accent);
+      background: #17213d;
+    }
+
+    .ttt-cell.x {
+      color: var(--accent);
+      text-shadow: 0 0 12px rgba(0, 242, 254, 0.7);
+    }
+
+    .ttt-cell.o {
+      color: var(--neon-pink);
+      text-shadow: 0 0 12px rgba(255, 42, 133, 0.7);
+    }
+
+    .status-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 6px;
+    }
+
+    /* Live Activity Card */
+    .activity-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .activity-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .feed-item {
+      font-size: 13px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #0e1526;
+      border-left: 3px solid var(--accent);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .feed-text {
+      color: var(--text);
+    }
+
+    .feed-time {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🎮</div>
+      <div>
+        <div class="brand-title">ANTIGRAVITY MINI APP</div>
+      </div>
+    </div>
+    <div class="ws-badge" id="wsStatus">
+      <div class="ws-dot"></div>
+      <span id="wsText">ONLINE</span>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- Game Select Tabs -->
+    <div class="game-tabs">
+      <button class="tab-btn active" id="tabRunner" onclick="switchGame('runner')">
+        🚀 Cyber Runner
+      </button>
+      <button class="tab-btn" id="tabTTT" onclick="switchGame('ttt')">
+        🤖 AI Tic-Tac-Toe
+      </button>
+    </div>
+
+    <!-- GAME 1: CYBER RUNNER -->
+    <div class="game-panel" id="runnerView">
+      <div class="hud">
+        <div class="hud-box">
+          <span class="hud-label">SKOR ANDA</span>
+          <span class="hud-val" id="scoreVal">0</span>
+        </div>
+        <div class="hud-box" style="align-items: flex-end;">
+          <span class="hud-label">REKOR TERTINGGI</span>
+          <span class="hud-val pink" id="highScoreVal">0</span>
+        </div>
+      </div>
+
+      <canvas id="runnerCanvas" width="400" height="420"></canvas>
+
+      <div class="controls">
+        <button class="btn btn-primary" id="btnAction" onclick="handleTap()">
+          ⚡ BOOST / LOMPAT (TAP)
+        </button>
+        <button class="btn btn-secondary" onclick="shareScore()">
+          📤 SHARE KE WA
+        </button>
+      </div>
+      <div class="status-text">Sentuh layar atau tekan Spasi untuk melompat & hindari laser!</div>
+    </div>
+
+    <!-- GAME 2: TIC TAC TOE -->
+    <div class="game-panel" id="tictactoeView">
+      <div class="hud">
+        <div class="hud-box">
+          <span class="hud-label">KAMU (X)</span>
+          <span class="hud-val" id="tttWins">0</span>
+        </div>
+        <div class="hud-box" style="align-items: flex-end;">
+          <span class="hud-label">AI ANTIGRAVITY (O)</span>
+          <span class="hud-val pink" id="tttLosses">0</span>
+        </div>
+      </div>
+
+      <div class="ttt-grid" id="tttGrid">
+        <div class="ttt-cell" onclick="makeMove(0)"></div>
+        <div class="ttt-cell" onclick="makeMove(1)"></div>
+        <div class="ttt-cell" onclick="makeMove(2)"></div>
+        <div class="ttt-cell" onclick="makeMove(3)"></div>
+        <div class="ttt-cell" onclick="makeMove(4)"></div>
+        <div class="ttt-cell" onclick="makeMove(5)"></div>
+        <div class="ttt-cell" onclick="makeMove(6)"></div>
+        <div class="ttt-cell" onclick="makeMove(7)"></div>
+        <div class="ttt-cell" onclick="makeMove(8)"></div>
+      </div>
+
+      <div class="status-text" id="tttStatus">Giliran Anda! Pilih kotak mana saja.</div>
+
+      <div class="controls" style="margin-top: 14px;">
+        <button class="btn btn-secondary" onclick="resetTTT()">
+          🔄 MAIN ULANG
+        </button>
+        <button class="btn btn-pink" onclick="shareScore()">
+          📤 SHARE HASIL KE WA
+        </button>
+      </div>
+    </div>
+
+    <!-- Live Bot Sync Card -->
+    <div class="activity-card">
+      <div class="activity-header">
+        <span>⚡ LIVE WEBSOCKET ACTIVITY</span>
+        <span style="font-size: 11px; color: var(--neon-green);" id="syncTime">Tersinkronisasi</span>
+      </div>
+      <div class="feed-item">
+        <div class="feed-text">🤖 Antigravity Laptop Engine Siap</div>
+        <div class="feed-time">Aktif</div>
+      </div>
+      <div class="feed-item" id="lastScoreItem">
+        <div class="feed-text" id="lastScoreText">🎮 Belum ada game dimulai</div>
+        <div class="feed-time" id="lastScoreTime">-</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Audio FX using Web Audio API
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function playBeep(freq = 440, type = 'sine', duration = 0.1) {
+      try {
+        if (!audioCtx) audioCtx = new AudioCtx();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (_) {}
+    }
+
+    // WebSocket Connection
+    let ws = null;
+    function initWebSocket() {
+      const loc = window.location;
+      const wsProto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProto}//${loc.host}`;
+
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => {
+          document.getElementById('wsStatus').style.background = '#102a27';
+          document.getElementById('wsText').innerText = 'TERHUBUNG';
+          document.getElementById('wsText').style.color = 'var(--neon-green)';
+        };
+        ws.onclose = () => {
+          document.getElementById('wsStatus').style.background = '#2a1212';
+          document.getElementById('wsText').innerText = 'OFFLINE';
+          document.getElementById('wsText').style.color = 'var(--neon-pink)';
+          setTimeout(initWebSocket, 3000);
+        };
+        ws.onerror = () => {};
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'leaderboard_update') {
+              // Handle leaderboard
+            }
+          } catch (_) {}
+        };
+      } catch (e) {
+        console.warn('WS error:', e);
+      }
+    }
+    initWebSocket();
+
+    function sendWs(data) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(data));
+      }
+    }
+
+    // Switch Tabs
+    function switchGame(type) {
+      const rView = document.getElementById('runnerView');
+      const tView = document.getElementById('tictactoeView');
+      const tRun = document.getElementById('tabRunner');
+      const tTTT = document.getElementById('tabTTT');
+
+      if (type === 'runner') {
+        rView.style.display = 'flex';
+        tView.style.display = 'none';
+        tRun.classList.add('active');
+        tTTT.classList.remove('active');
+      } else {
+        rView.style.display = 'none';
+        tView.style.display = 'flex';
+        tRun.classList.remove('active');
+        tTTT.classList.add('active');
+      }
+    }
+
+    // --- GAME 1: CYBER RUNNER ---
+    const canvas = document.getElementById('runnerCanvas');
+    const ctx = canvas.getContext('2d');
+    let runnerState = 'START'; // START, PLAYING, GAMEOVER
+    let score = 0;
+    let highScore = parseInt(localStorage.getItem('ag_runner_hi') || '0', 10);
+    document.getElementById('highScoreVal').innerText = highScore;
+
+    const drone = {
+      x: 60,
+      y: 200,
+      vy: 0,
+      size: 16,
+      gravity: 0.38,
+      jump: -6.5,
+    };
+
+    let pipes = [];
+    let pipeTimer = 0;
+
+    function resetRunner() {
+      drone.y = 200;
+      drone.vy = 0;
+      pipes = [];
+      score = 0;
+      pipeTimer = 0;
+      document.getElementById('scoreVal').innerText = '0';
+    }
+
+    function handleTap() {
+      if (runnerState === 'START' || runnerState === 'GAMEOVER') {
+        resetRunner();
+        runnerState = 'PLAYING';
+        sendWs({ type: 'game_start', game: 'cyber_runner' });
+      } else if (runnerState === 'PLAYING') {
+        drone.vy = drone.jump;
+        playBeep(650, 'sine', 0.08);
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        handleTap();
+      }
+    });
+
+    canvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      handleTap();
+    });
+
+    function spawnPipe() {
+      const gap = 120;
+      const topHeight = 50 + Math.random() * (canvas.height - gap - 100);
+      pipes.push({
+        x: canvas.width,
+        top: topHeight,
+        bottom: topHeight + gap,
+        width: 36,
+        passed: false,
+      });
+    }
+
+    function loopRunner() {
+      ctx.fillStyle = '#060913';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Grid lines
+      ctx.strokeStyle = '#0e182e';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < canvas.width; x += 30) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+
+      if (runnerState === 'PLAYING') {
+        drone.vy += drone.gravity;
+        drone.y += drone.vy;
+
+        // Pipe generator
+        pipeTimer++;
+        if (pipeTimer > 85) {
+          spawnPipe();
+          pipeTimer = 0;
+        }
+
+        // Move pipes
+        for (let i = pipes.length - 1; i >= 0; i--) {
+          const p = pipes[i];
+          p.x -= 2.8;
+
+          // Draw neon obstacles
+          ctx.fillStyle = '#ff2a85';
+          ctx.shadowColor = '#ff2a85';
+          ctx.shadowBlur = 12;
+          ctx.fillRect(p.x, 0, p.width, p.top);
+          ctx.fillRect(p.x, p.bottom, p.width, canvas.height - p.bottom);
+          ctx.shadowBlur = 0;
+
+          // Collision detection
+          if (
+            drone.x + drone.size > p.x &&
+            drone.x - drone.size < p.x + p.width
+          ) {
+            if (drone.y - drone.size < p.top || drone.y + drone.size > p.bottom) {
+              gameOverRunner();
+            }
+          }
+
+          // Score count
+          if (!p.passed && p.x + p.width < drone.x) {
+            p.passed = true;
+            score += 10;
+            document.getElementById('scoreVal').innerText = score;
+            playBeep(880, 'sine', 0.05);
+            sendWs({ type: 'game_score', game: 'cyber_runner', score });
+          }
+
+          if (p.x + p.width < -10) {
+            pipes.splice(i, 1);
+          }
+        }
+
+        // Bound checks
+        if (drone.y < 0 || drone.y > canvas.height) {
+          gameOverRunner();
+        }
+      }
+
+      // Draw Drone (Player)
+      ctx.fillStyle = '#00f2fe';
+      ctx.shadowColor = '#00f2fe';
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.arc(drone.x, drone.y, drone.size, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Drone core
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(drone.x, drone.y, drone.size * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Draw State Overlays
+      if (runnerState === 'START') {
+        ctx.fillStyle = 'rgba(6, 9, 19, 0.75)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#00f2fe';
+        ctx.font = 'bold 22px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('⚡ CYBER RUNNER', canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '14px sans-serif';
+        ctx.fillText('Sentuh Layar Untuk Mulai', canvas.width / 2, canvas.height / 2 + 15);
+      } else if (runnerState === 'GAMEOVER') {
+        ctx.fillStyle = 'rgba(6, 9, 19, 0.85)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ff2a85';
+        ctx.font = 'bold 24px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('💥 GAME OVER', canvas.width / 2, canvas.height / 2 - 30);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 18px sans-serif';
+        ctx.fillText(`Skor: ${score}`, canvas.width / 2, canvas.height / 2 + 5);
+        ctx.fillStyle = '#00f2fe';
+        ctx.font = '13px sans-serif';
+        ctx.fillText('Sentuh Untuk Main Lagi', canvas.width / 2, canvas.height / 2 + 40);
+      }
+
+      requestAnimationFrame(loopRunner);
+    }
+
+    function gameOverRunner() {
+      runnerState = 'GAMEOVER';
+      playBeep(180, 'sawtooth', 0.25);
+      if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('ag_runner_hi', highScore);
+        document.getElementById('highScoreVal').innerText = highScore;
+      }
+
+      // Update feed
+      document.getElementById('lastScoreText').innerText = `🏆 Cyber Runner: ${score} Pts`;
+      document.getElementById('lastScoreTime').innerText = new Date().toLocaleTimeString();
+
+      sendWs({
+        type: 'game_over',
+        game: 'cyber_runner',
+        finalScore: score,
+        highScore: highScore
+      });
+    }
+
+    loopRunner();
+
+    // --- GAME 2: TIC TAC TOE VS AI ---
+    let tttBoard = Array(9).fill(null);
+    let tttTurn = 'X'; // X = player, O = AI
+    let tttActive = true;
+    let tWins = 0, tLosses = 0;
+
+    function renderTTT() {
+      const cells = document.querySelectorAll('.ttt-cell');
+      cells.forEach((c, idx) => {
+        c.innerText = tttBoard[idx] || '';
+        c.className = 'ttt-cell' + (tttBoard[idx] ? ` ${tttBoard[idx].toLowerCase()}` : '');
+      });
+    }
+
+    function checkTTTWinner(b) {
+      const wins = [
+        [0, 1, 2], [3, 4, 5], [6, 7, 8],
+        [0, 3, 6], [1, 4, 7], [2, 5, 8],
+        [0, 4, 8], [2, 4, 6]
+      ];
+      for (const [x, y, z] of wins) {
+        if (b[x] && b[x] === b[y] && b[x] === b[z]) return b[x];
+      }
+      if (b.every(cell => cell !== null)) return 'DRAW';
+      return null;
+    }
+
+    function makeMove(idx) {
+      if (!tttActive || tttBoard[idx] || tttTurn !== 'X') return;
+      tttBoard[idx] = 'X';
+      playBeep(520, 'sine', 0.08);
+      renderTTT();
+
+      const res = checkTTTWinner(tttBoard);
+      if (res) return handleTTTEnd(res);
+
+      tttTurn = 'O';
+      document.getElementById('tttStatus').innerText = '🤖 AI Antigravity sedang berpikir...';
+
+      setTimeout(makeAiMove, 450);
+    }
+
+    function makeAiMove() {
+      if (!tttActive) return;
+      // Simple smart move
+      let chosen = null;
+      // 1. Try to win
+      for (let i = 0; i < 9; i++) {
+        if (!tttBoard[i]) {
+          tttBoard[i] = 'O';
+          if (checkTTTWinner(tttBoard) === 'O') { chosen = i; tttBoard[i] = null; break; }
+          tttBoard[i] = null;
+        }
+      }
+      // 2. Block player
+      if (chosen === null) {
+        for (let i = 0; i < 9; i++) {
+          if (!tttBoard[i]) {
+            tttBoard[i] = 'X';
+            if (checkTTTWinner(tttBoard) === 'X') { chosen = i; tttBoard[i] = null; break; }
+            tttBoard[i] = null;
+          }
+        }
+      }
+      // 3. Take center
+      if (chosen === null && !tttBoard[4]) chosen = 4;
+      // 4. Random available
+      if (chosen === null) {
+        const avail = tttBoard.map((v, i) => v === null ? i : null).filter(v => v !== null);
+        if (avail.length > 0) chosen = avail[Math.floor(Math.random() * avail.length)];
+      }
+
+      if (chosen !== null) {
+        tttBoard[chosen] = 'O';
+        playBeep(340, 'triangle', 0.1);
+        renderTTT();
+        const res = checkTTTWinner(tttBoard);
+        if (res) return handleTTTEnd(res);
+      }
+
+      tttTurn = 'X';
+      document.getElementById('tttStatus').innerText = 'Giliran Anda!';
+    }
+
+    function handleTTTEnd(winner) {
+      tttActive = false;
+      const statusEl = document.getElementById('tttStatus');
+      if (winner === 'X') {
+        tWins++;
+        document.getElementById('tttWins').innerText = tWins;
+        statusEl.innerText = '🎉 ANDA MENANG MELAWAN AI!';
+        playBeep(880, 'sine', 0.3);
+      } else if (winner === 'O') {
+        tLosses++;
+        document.getElementById('tttLosses').innerText = tLosses;
+        statusEl.innerText = '🤖 AI ANTIGRAVITY MENANG!';
+        playBeep(200, 'sawtooth', 0.3);
+      } else {
+        statusEl.innerText = '🤝 PERMAINAN SERI!';
+      }
+
+      sendWs({
+        type: 'game_over',
+        game: 'tic_tac_toe',
+        winner,
+        wins: tWins,
+        losses: tLosses
+      });
+    }
+
+    function resetTTT() {
+      tttBoard = Array(9).fill(null);
+      tttTurn = 'X';
+      tttActive = true;
+      document.getElementById('tttStatus').innerText = 'Giliran Anda! Pilih kotak.';
+      renderTTT();
+    }
+
+    // Share to WhatsApp
+    function shareScore() {
+      const activeTab = document.getElementById('tabRunner').classList.contains('active') ? 'Cyber Runner' : 'Tic-Tac-Toe';
+      const text = `🕹️ *ANTIGRAVITY MINI APP GAMING*\nSaya baru saja main *${activeTab}* di Antigravity Mini App!\n🏆 Skor Tertinggi: *${highScore} Pts*\n\nMainkan juga game mini app seru ini langsung lewat WhatsApp! ⚡`;
+      const url = `whatsapp://send?text=${encodeURIComponent(text)}`;
+      window.location.href = url;
+    }
+  </script>
+</body>
+</html>

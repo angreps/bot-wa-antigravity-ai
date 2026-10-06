@@ -13,6 +13,7 @@ const fs = require('fs');
 const config = require('../config');
 const commands = require('./commands');
 const terminal = require('./terminal');
+const embed = require('./embed');
 
 const logger = pino({ level: 'silent' });
 
@@ -156,13 +157,20 @@ async function startWhatsAppBot() {
       setTimeout(async () => {
         try {
           const sys = terminal.getSystemStatus();
-          const notifMsg = `🟢 *Bot Antigravity Laptop Online & Siap!*\n` +
-            `─────────────────────────\n` +
-            `🖥️ *Host:* ${sys.hostname}\n` +
-            `📁 *Workspace:* \`${sys.cwd}\`\n` +
-            `🤖 *Engine:* Antigravity CLI (Gemini Pro)\n` +
-            `🔒 *Mode:* ${commands.getSelfbotMode() ? 'Selfbot (Khusus Owner)' : 'Publik'}\n\n` +
-            `💡 Kirim pesan apa saja untuk ngeprompt AI atau ketik \`${config.prefix}help\` untuk melihat menu perintah.`;
+          const notifMsg = embed.createEmbed({
+            title: '🟢 *BOT ANTIGRAVITY ONLINE & SIAP*',
+            subtitle: 'System Ready',
+            body: [
+              `🖥️ *Host:* ${sys.hostname}`,
+              `📁 *Workspace:* \`${sys.cwd}\``,
+              '🤖 *Engine:* Antigravity CLI (Gemini Pro)',
+              `🔒 *Mode:* ${commands.getSelfbotMode() ? 'Selfbot (Khusus Owner)' : 'Publik'}`,
+              '',
+              `💡 Ketik pesan apa saja untuk chat dengan AI atau ketik \`${config.prefix}help\` untuk menu.`,
+              `🎮 Ketik \`${config.prefix}game\` untuk membuka Mini App Game WhatsApp!`,
+            ].join('\n'),
+            footer: 'System Initialized Successfully',
+          });
 
           if (config.primaryOwnerLid) {
             await sock.sendMessage(`${config.primaryOwnerLid}@lid`, { text: notifMsg }).catch(() => {});

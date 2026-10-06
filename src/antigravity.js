@@ -4,11 +4,12 @@ const path = require('path');
 const config = require('../config');
 const terminal = require('./terminal');
 const tracker = require('./tracker');
+const embed = require('./embed');
 
 // State tracking
 let isBusy = false;
 let activeProcess = null;
-let shouldStartNewConversation = false;
+let shouldStartNewConversation = true; // Always start clean on process boot!
 let customModel = null; // Start null so it uses default laptop session smoothly
 
 const MODEL_PRESETS = {
@@ -166,13 +167,12 @@ function askAntigravity(promptText, options = {}) {
 
     // Prepare CLI args
     const args = [];
-    // Use isolated project for WhatsApp bot so it does not load massive IDE history
-    args.push('--project', 'wa-bot');
 
-    if (!shouldStartNewConversation) {
-      args.push('-c');
-    } else {
+    if (shouldStartNewConversation) {
+      args.push('--new-project');
       shouldStartNewConversation = false;
+    } else {
+      args.push('-c');
     }
 
     args.push('--dangerously-skip-permissions');
@@ -205,6 +205,7 @@ function askAntigravity(promptText, options = {}) {
     const timer = setTimeout(() => {
       if (activeProcess === child) {
         console.warn(`[AGY] Timeout reached (${timeoutMs / 1000}s). Killing process...`);
+        shouldStartNewConversation = true; // Invalidate broken session!
         try {
           child.kill('SIGKILL');
         } catch (_) {}
@@ -223,8 +224,13 @@ function askAntigravity(promptText, options = {}) {
       clearTimeout(timer);
       isBusy = false;
       activeProcess = null;
+      shouldStartNewConversation = true;
       console.error('[AGY Process Error]:', err);
-      const errMsg = `❌ *Gagal memanggil Antigravity CLI*: ${err.message}\nPastikan \`agy\` terpasang di laptop.`;
+      const errMsg = embed.createEmbed({
+        title: '❌ *GAGAL MEMANGGIL ANTIGRAVITY*',
+        body: `Error: ${err.message}\nPastikan \`agy\` terpasang di server.`,
+        footer: 'Execution Error',
+      });
       resolve({
         text: errMsg,
         chunks: [errMsg],
@@ -255,16 +261,18 @@ function askAntigravity(promptText, options = {}) {
       }
 
       const fileChanges = tracker.getWorkspaceChanges(workingDir);
-      let logsHeader = '';
-      if (fileChanges.length > 0) {
-        logsHeader = `📝 *Logs Perubahan File:*\n${fileChanges.join('\n')}\n\n`;
-      }
 
       if (!rawOutput && errorOutput) {
         const cleanedErr = cleanAndFormatOutput(errorOutput);
+        const errEmbed = embed.createEmbed({
+          title: '⚠️ *ANTIGRAVITY NOTICE / ERROR*',
+          body: cleanedErr,
+          fields: fileChanges.length > 0 ? [{ title: '📝 Perubahan File', value: fileChanges.join('\n') }] : [],
+          footer: `Durasi: ${duration}`,
+        });
         return resolve({
-          text: `⚠️ *Antigravity Notice / Error (${duration}):*\n${logsHeader}${cleanedErr}`,
-          chunks: [`⚠️ *Antigravity Notice / Error (${duration}):*\n${logsHeader}${cleanedErr}`],
+          text: errEmbed,
+          chunks: [errEmbed],
           fileChanges,
           success: code === 0,
           duration,
@@ -272,9 +280,22 @@ function askAntigravity(promptText, options = {}) {
       }
 
       if (code === null && !rawOutput && !errorOutput) {
+        shouldStartNewConversation = true; // Invalidate broken session!
+        const timeoutEmbed = embed.createEmbed({
+          title: '⏱️ *WAKTU PROSES HABIS (TIMEOUT)*',
+          body: [
+            `Instruksi memakan waktu lebih dari 3 menit (${duration}).`,
+            '',
+            '💡 *Tips:*',
+            '• Kirim instruksi yang lebih terarah & spesifik',
+            '• Ketik `!new` untuk mereset topik obrolan baru',
+          ].join('\n'),
+          fields: fileChanges.length > 0 ? [{ title: '📝 Perubahan File', value: fileChanges.join('\n') }] : [],
+          footer: 'Antigravity Process Terminated',
+        });
         return resolve({
-          text: `${logsHeader}⏱️ *Waktu Proses Habis (Timeout ${duration}):*\nInstruksi memakan waktu lebih dari 3 menit atau terpotong. Cobalah kirim pesan yang lebih lengkap/spesifik atau ketik \`!new\` untuk mereset percakapan baru.`,
-          chunks: [`${logsHeader}⏱️ *Waktu Proses Habis (Timeout ${duration}):*\nInstruksi memakan waktu lebih dari 3 menit atau terpotong. Cobalah kirim pesan yang lebih lengkap/spesifik atau ketik \`!new\` untuk mereset percakapan baru.`],
+          text: timeoutEmbed,
+          chunks: [timeoutEmbed],
           fileChanges,
           success: false,
           duration,
@@ -282,16 +303,31 @@ function askAntigravity(promptText, options = {}) {
       }
 
       if (!rawOutput && !errorOutput) {
+        const emptyEmbed = embed.createEmbed({
+          title: 'ℹ️ *ANTIGRAVITY EXECUTION*',
+          body: `Perintah selesai dieksekusi tanpa teks balasan (Exit Code: ${code}).`,
+          fields: fileChanges.length > 0 ? [{ title: '📝 Perubahan File', value: fileChanges.join('\n') }] : [],
+          footer: `Durasi: ${duration}`,
+        });
         return resolve({
-          text: `${logsHeader}_Selesai tanpa output teks (Exit code: ${code}, Durasi: ${duration})_`,
-          chunks: [`${logsHeader}_Selesai tanpa output teks (Exit code: ${code}, Durasi: ${duration})_`],
+          text: emptyEmbed,
+          chunks: [emptyEmbed],
           fileChanges,
           success: true,
           duration,
         });
       }
 
-      const formatted = logsHeader + cleanAndFormatOutput(rawOutput);
+      const cleanedOutput = cleanAndFormatOutput(rawOutput);
+      const activeModelLabel = getModel();
+
+      // Format clean response into beautiful embed card
+      const formatted = embed.formatAiResponse(cleanedOutput, {
+        model: activeModelLabel,
+        duration,
+        fileChanges,
+      });
+
       const chunks = splitIntoChunks(formatted);
 
       resolve({
@@ -311,6 +347,7 @@ function stopActiveProcess() {
       activeProcess.kill('SIGKILL');
       activeProcess = null;
       isBusy = false;
+      shouldStartNewConversation = true;
       return true;
     } catch (e) {
       return false;

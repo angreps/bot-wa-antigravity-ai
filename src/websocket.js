@@ -1,31 +1,131 @@
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const { WebSocketServer } = require('ws');
 const terminal = require('./terminal');
 const antigravity = require('./antigravity');
 
+let httpServer = null;
 let wss = null;
 const clients = new Set();
+let gameStats = {
+  totalPlays: 0,
+  highScores: {
+    cyber_runner: { score: 0, player: 'Anon' },
+  },
+  lastGames: [],
+};
+
+// Helper: Get best external or LAN IP address
+function getLocalIp() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      if (net.family === 'IPv4' && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+
+function getGameUrl(port = 8765) {
+  const ip = getLocalIp();
+  return {
+    local: `http://localhost:${port}/game`,
+    lan: `http://${ip}:${port}/game`,
+    wsUrl: `ws://${ip}:${port}`,
+  };
+}
 
 function startWebSocketServer(port = 8765) {
   try {
-    wss = new WebSocketServer({ port });
-    console.log(`⚡ WebSocket Server berjalan di ws://localhost:${port}`);
+    // 1. Create HTTP Server for HTML Mini App
+    httpServer = http.createServer((req, res) => {
+      // CORS headers
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
+      const urlPath = req.url.split('?')[0];
+
+      // Route / or /game to public/game.html
+      if (urlPath === '/' || urlPath === '/game' || urlPath === '/miniapp') {
+        const gameHtmlPath = path.join(__dirname, '../public/game.html');
+        if (fs.existsSync(gameHtmlPath)) {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          return res.end(fs.readFileSync(gameHtmlPath));
+        }
+      }
+
+      // API route for status or highscores
+      if (urlPath === '/api/stats') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+          status: 'online',
+          gameStats,
+          model: antigravity.getModel(),
+        }));
+      }
+
+      // Default fallback
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('404 Not Found - Antigravity Mini App Server');
+    });
+
+    // 2. Attach WebSocket to HTTP Server
+    wss = new WebSocketServer({ server: httpServer });
 
     wss.on('connection', (ws) => {
       clients.add(ws);
-      console.log(`[WS] Client baru terhubung (Total: ${clients.size})`);
+      console.log(`[WS] Client baru terhubung ke Mini App / Bridge (Total: ${clients.size})`);
 
       // Send welcome handshake
       ws.send(JSON.stringify({
         type: 'connected',
-        message: 'Terhubung ke Antigravity Laptop WebSocket Bridge',
+        message: 'Terhubung ke Antigravity Mini App & AI Bridge',
         model: antigravity.getModel(),
-        cwd: terminal.getCwd(),
+        gameStats,
       }));
 
       ws.on('message', async (data) => {
         try {
           const payload = JSON.parse(data.toString('utf8'));
-          if (payload.type === 'prompt') {
+
+          // MINI APP GAME EVENTS
+          if (payload.type === 'game_start') {
+            gameStats.totalPlays++;
+            broadcast('game_activity', {
+              event: 'started',
+              game: payload.game,
+              totalPlays: gameStats.totalPlays,
+            });
+          } else if (payload.type === 'game_score') {
+            // Realtime score stream
+            if (payload.game === 'cyber_runner' && payload.score > gameStats.highScores.cyber_runner.score) {
+              gameStats.highScores.cyber_runner = {
+                score: payload.score,
+                player: payload.player || 'Player WA',
+                timestamp: Date.now(),
+              };
+            }
+          } else if (payload.type === 'game_over') {
+            gameStats.lastGames.unshift({
+              game: payload.game,
+              score: payload.finalScore || payload.winner,
+              timestamp: Date.now(),
+            });
+            if (gameStats.lastGames.length > 10) gameStats.lastGames.pop();
+
+            broadcast('game_over_broadcast', {
+              game: payload.game,
+              stats: payload,
+              highScores: gameStats.highScores,
+            });
+          }
+
+          // TERMINAL / AI PROMPT EVENTS
+          else if (payload.type === 'prompt') {
             const promptText = payload.prompt || payload.text;
             if (!promptText) return ws.send(JSON.stringify({ type: 'error', error: 'Prompt kosong' }));
 
@@ -42,6 +142,7 @@ function startWebSocketServer(port = 8765) {
               type: 'status_response',
               system: terminal.getSystemStatus(),
               model: antigravity.getModel(),
+              gameStats,
             }));
           } else if (payload.type === 'ping') {
             ws.send(JSON.stringify({ type: 'pong' }));
@@ -59,6 +160,14 @@ function startWebSocketServer(port = 8765) {
       ws.on('error', (err) => {
         console.error('[WS Error]:', err.message);
       });
+    });
+
+    httpServer.listen(port, () => {
+      const urls = getGameUrl(port);
+      console.log(`⚡ Mini App Server & WebSocket berjalan di:`);
+      console.log(`   🔗 Web Mini App : ${urls.lan}`);
+      console.log(`   🔗 Localhost    : ${urls.local}`);
+      console.log(`   ⚡ WebSocket    : ${urls.wsUrl}`);
     });
 
     return wss;
@@ -79,7 +188,13 @@ function broadcast(event, data) {
   }
 }
 
+function getStats() {
+  return gameStats;
+}
+
 module.exports = {
   startWebSocketServer,
   broadcast,
+  getGameUrl,
+  getStats,
 };
