@@ -478,6 +478,19 @@ async function handleMessage(senderPhone, messageText, senderJid, isFromMe = fal
     promptQuery = `[Lampiran Gambar Diterima Dari WhatsApp]: file:///${normPath}\n(File gambar tersimpan di path lokal laptop: ${normPath}. Silakan periksa, peroleh informasi, dan analisis isi gambar tersebut secara mendalam untuk merespon pengguna.)\n\n[Pertanyaan / Perintah Pengguna]:\n${promptQuery}`;
   }
 
+  // If user attached a document / code / log file
+  if (options && options.docInfo) {
+    const { fileName, filePath, fileText } = options.docInfo;
+    const normPath = filePath ? filePath.replace(/\\/g, '/') : '';
+
+    if (fileText && fileText.trim()) {
+      let ext = path.extname(fileName || '').toLowerCase().replace('.', '') || 'txt';
+      promptQuery = `[Lampiran File Kode / Log Diterima Dari WhatsApp]: ${fileName} (Path Lokal: file:///${normPath})\n\n📄 **ISI UTAMA FILE (${fileName}):**\n\`\`\`${ext}\n${fileText.trim()}\n\`\`\`\n\n[Pertanyaan / Perintah / Instruksi Analisis Pengguna]:\n${promptQuery}`;
+    } else if (normPath) {
+      promptQuery = `[Lampiran File Diterima Dari WhatsApp]: ${fileName} (Path Lokal: file:///${normPath})\n(File terlampir tersimpan di path lokal laptop: ${normPath}. Silakan periksa dan analisis isi file tersebut.)\n\n[Pertanyaan / Perintah / Instruksi Analisis Pengguna]:\n${promptQuery}`;
+    }
+  }
+
   // Send prompt directly to Antigravity CLI
   const result = await antigravity.askAntigravity(promptQuery, {
     cwd: terminal.getCwd(),

@@ -109,6 +109,90 @@ async function downloadAndSaveImageMessage(msg, sock) {
   }
 }
 
+async function downloadAndSaveDocumentMessage(msg, sock) {
+  try {
+    cleanupTempMedia();
+
+    let docMsg = msg.message?.documentMessage ||
+                 msg.message?.documentWithCaptionMessage?.message?.documentMessage;
+
+    let targetMsg = msg;
+
+    if (!docMsg && msg.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
+      const q = msg.message.extendedTextMessage.contextInfo.quotedMessage;
+      docMsg = q.documentMessage || q.documentWithCaptionMessage?.message?.documentMessage;
+      if (docMsg) {
+        targetMsg = {
+          key: {
+            remoteJid: msg.key.remoteJid,
+            id: msg.key.id,
+            fromMe: false,
+          },
+          message: q,
+        };
+      }
+    }
+
+    if (!docMsg) return null;
+
+    const fileName = docMsg.fileName || `file_${Date.now()}.txt`;
+    const caption = docMsg.caption || '';
+    const mimetype = docMsg.mimetype || '';
+
+    const buffer = await downloadMediaMessage(
+      targetMsg,
+      'buffer',
+      {},
+      { logger, reuploadRequest: sock.updateMediaMessage }
+    );
+
+    if (!buffer || buffer.length === 0) return null;
+
+    const safeName = fileName.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const localFileName = `doc_${Date.now()}_${safeName}`;
+    const filePath = path.join(tempMediaDir, localFileName);
+    fs.writeFileSync(filePath, buffer);
+
+    console.log(`[Document Downloaded] Saved document for analysis: ${filePath} (${buffer.length} bytes)`);
+
+    // Extract text if file is code / script / log / text
+    let fileText = null;
+    const ext = path.extname(fileName).toLowerCase();
+    const textExts = [
+      '.pwn', '.inc', '.txt', '.log', '.err', '.out',
+      '.json', '.js', '.ts', '.py', '.c', '.cpp', '.h', '.hpp',
+      '.cs', '.php', '.html', '.css', '.xml', '.yaml', '.yml',
+      '.sh', '.bat', '.ps1', '.cfg', '.ini', '.sql', '.md', '.amx'
+    ];
+
+    const isTextMime = mimetype.startsWith('text/') || mimetype.includes('json') || mimetype.includes('javascript') || mimetype.includes('xml');
+
+    if (textExts.includes(ext) || isTextMime || buffer.length < 250000) {
+      try {
+        const rawStr = buffer.toString('utf-8');
+        const sample = rawStr.slice(0, 1000);
+        if (!sample.includes('\u0000')) {
+          fileText = rawStr;
+          if (fileText.length > 100000) {
+            fileText = fileText.substring(0, 100000) + '\n\n... [Isi file dipotong karena melebihi 100.000 karakter] ...';
+          }
+        }
+      } catch (_) {}
+    }
+
+    return {
+      fileName,
+      filePath,
+      fileText,
+      caption,
+      mimetype,
+    };
+  } catch (err) {
+    console.error('[Document Download Error]:', err.message);
+    return null;
+  }
+}
+
 // Track message IDs sent by the bot to prevent self-reply loops
 const botSentMessageIds = new Set();
 
@@ -374,9 +458,19 @@ async function startWhatsAppBot() {
       // Extract sender phone number or LID
       const senderPhone = (msg.key.participant || senderJid).split('@')[0].split(':')[0];
 
-      // Extract message content & detect image attachments
+      // Extract message content & detect image / document attachments
       let text = '';
-      const isImage = Boolean(msg.message?.imageMessage || msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage);
+      const isImage = Boolean(
+        msg.message?.imageMessage ||
+        msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage
+      );
+
+      const isDocument = Boolean(
+        msg.message?.documentMessage ||
+        msg.message?.documentWithCaptionMessage ||
+        msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.documentMessage ||
+        msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.documentWithCaptionMessage
+      );
 
       if (msg.message.conversation) {
         text = msg.message.conversation;
@@ -384,21 +478,38 @@ async function startWhatsAppBot() {
         text = msg.message.extendedTextMessage.text;
       } else if (msg.message.imageMessage?.caption) {
         text = msg.message.imageMessage.caption;
+      } else if (msg.message.documentMessage?.caption) {
+        text = msg.message.documentMessage.caption;
+      } else if (msg.message.documentWithCaptionMessage?.message?.documentMessage?.caption) {
+        text = msg.message.documentWithCaptionMessage.message.documentMessage.caption;
       }
 
       text = (text || '').trim();
+
+      // Download attachments
+      let imagePath = null;
+      if (isImage) {
+        imagePath = await downloadAndSaveImageMessage(msg, sock);
+      }
+
+      let docInfo = null;
+      if (isDocument) {
+        docInfo = await downloadAndSaveDocumentMessage(msg, sock);
+      }
 
       if (!text && isImage) {
         text = 'Jelaskan dan analisis gambar terlampir ini secara detail.';
       }
 
-      if (!text) return;
-
-      // Download image media if attached
-      let imagePath = null;
-      if (isImage) {
-        imagePath = await downloadAndSaveImageMessage(msg, sock);
+      if (!text && docInfo) {
+        if (docInfo.caption && docInfo.caption.trim()) {
+          text = docInfo.caption.trim();
+        } else {
+          text = `Tolong periksa, bedah, dan analisis file/log kode terlampir ini (${docInfo.fileName}). Berikan penjelasan detail mengenai error, bug, penyebab, dan perbaikannya.`;
+        }
       }
+
+      if (!text && !imagePath && !docInfo) return;
 
       // If message is fromMe, only process if sent to oneself or starts with prefix
       if (msg.key.fromMe) {
@@ -409,7 +520,7 @@ async function startWhatsAppBot() {
         }
       }
 
-      console.log(`[WA Incoming] From: ${senderPhone} (${senderJid}) | fromMe: ${Boolean(msg.key.fromMe)} | Image: ${Boolean(imagePath)} | Text: "${text.substring(0, 50)}"`);
+      console.log(`[WA Incoming] From: ${senderPhone} (${senderJid}) | fromMe: ${Boolean(msg.key.fromMe)} | Image: ${Boolean(imagePath)} | Document: ${Boolean(docInfo)} | Text: "${text.substring(0, 50)}"`);
 
       const isAuthorized = commands.isAuthorized(senderPhone, senderJid, Boolean(msg.key.fromMe));
       const isPublicAllowed = !commands.getSelfbotMode();
@@ -417,6 +528,8 @@ async function startWhatsAppBot() {
       const isLongTask = canProceed && (
         !text.startsWith(config.prefix) ||
         text.startsWith(`${config.prefix}ai `) ||
+        imagePath ||
+        docInfo ||
         (isAuthorized && (
           text.startsWith(`${config.prefix}sh `) ||
           text.startsWith(`${config.prefix}exec `) ||
@@ -430,9 +543,13 @@ async function startWhatsAppBot() {
 
       if (isLongTask) {
         const preview = text.length > 55 ? text.substring(0, 55) + '...' : text;
+        let attachNote = '';
+        if (imagePath) attachNote = '\n📷 *Attachment:* _Gambar terlampir_';
+        else if (docInfo) attachNote = `\n📄 *Attachment File:* _${docInfo.fileName}_`;
+
         try {
           loadingMsg = await sock.sendMessage(senderJid, {
-            text: `⏳ *[Task Berjalan]* Sedang memproses...\n📋 *Task:* _"${preview}"_${imagePath ? '\n📷 *Attachment:* _Gambar terlampir_' : ''}\n⚡ _Status: Menghubungkan ke Antigravity..._`
+            text: `⏳ *[Task Berjalan]* Sedang memproses...\n📋 *Task:* _"${preview}"_${attachNote}\n⚡ _Status: AI sedang menganalisis file & mengerjakan task..._`
           }, { quoted: msg });
           if (loadingMsg?.key?.id) {
             botSentMessageIds.add(loadingMsg.key.id);
@@ -447,7 +564,7 @@ async function startWhatsAppBot() {
             elapsedSec += 4;
             try {
               const editRes = await sock.sendMessage(senderJid, {
-                text: `⏳ *[Task Berjalan (${elapsedSec}s)]* Sedang memproses...\n📋 *Task:* _"${preview}"_${imagePath ? '\n📷 *Attachment:* _Gambar terlampir_' : ''}\n⚡ _Status: AI sedang menganalisis gambar & mengerjakan task..._`,
+                text: `⏳ *[Task Berjalan (${elapsedSec}s)]* Sedang memproses...\n📋 *Task:* _"${preview}"_${attachNote}\n⚡ _Status: AI sedang menganalisis file & mengerjakan task..._`,
                 edit: loadingMsg.key,
               });
               if (editRes?.key?.id) botSentMessageIds.add(editRes.key.id);
@@ -460,7 +577,7 @@ async function startWhatsAppBot() {
       const quotedText = extractQuotedText(msg);
 
       // Process message through commands router
-      const reply = await commands.handleMessage(senderPhone, text, senderJid, Boolean(msg.key.fromMe), { quotedText, imagePath });
+      const reply = await commands.handleMessage(senderPhone, text, senderJid, Boolean(msg.key.fromMe), { quotedText, imagePath, docInfo });
 
       if (intervalTimer) clearInterval(intervalTimer);
 
