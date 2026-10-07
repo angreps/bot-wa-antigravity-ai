@@ -10,9 +10,9 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-function getWorkspaceChanges(cwd) {
-  if (!cwd || !fs.existsSync(cwd)) return [];
-  const results = [];
+function getGitStatusMap(cwd) {
+  const map = new Map();
+  if (!cwd || !fs.existsSync(cwd)) return map;
 
   try {
     const gitOut = execSync('git status --short', {
@@ -29,33 +29,93 @@ function getWorkspaceChanges(cwd) {
         const filePath = line.substring(2).trim().replace(/^"|"$/g, '');
         const fullPath = path.resolve(cwd, filePath);
 
-        let sizeStr = '';
+        let mtime = 0;
+        let size = 0;
+        let isDir = false;
+
         try {
           if (fs.existsSync(fullPath)) {
             const stat = fs.statSync(fullPath);
-            sizeStr = formatBytes(stat.size);
+            mtime = stat.mtimeMs;
+            size = stat.size;
+            isDir = stat.isDirectory();
           }
         } catch (_) {}
 
-        let icon = '✏️';
-        let action = 'Modified';
-
-        if (statusCode.includes('?') || statusCode.includes('A')) {
-          icon = '📄';
-          action = 'Created';
-        } else if (statusCode.includes('D')) {
-          icon = '🗑️';
-          action = 'Deleted';
-        } else if (statusCode.includes('R')) {
-          icon = '🔄';
-          action = 'Renamed';
-        }
-
-        results.push(`• ${icon} \`${filePath}\` (${action}${sizeStr ? ' - ' + sizeStr : ''})`);
+        map.set(filePath, { statusCode, mtime, size, isDir });
       }
     }
-  } catch (_) {
-    // Non-git directory or error, ignore
+  } catch (_) {}
+
+  return map;
+}
+
+function takeSnapshot(cwd) {
+  return {
+    time: Date.now(),
+    statusMap: getGitStatusMap(cwd),
+  };
+}
+
+function getWorkspaceChanges(cwd, beforeSnapshot) {
+  if (!cwd || !fs.existsSync(cwd)) return [];
+  const results = [];
+
+  const afterMap = getGitStatusMap(cwd);
+  const beforeMap = beforeSnapshot?.statusMap || new Map();
+  const startTime = beforeSnapshot?.time || 0;
+
+  for (const [filePath, afterInfo] of afterMap.entries()) {
+    const beforeInfo = beforeMap.get(filePath);
+
+    // If it existed before with same status and modification time, it was not changed during this turn
+    if (beforeInfo) {
+      if (beforeInfo.statusCode === afterInfo.statusCode && Math.abs(beforeInfo.mtime - afterInfo.mtime) < 500) {
+        continue;
+      }
+    } else if (startTime > 0 && afterInfo.mtime > 0 && afterInfo.mtime < startTime - 1000) {
+      // Existed before start time, ignore
+      continue;
+    }
+
+    const fullPath = path.resolve(cwd, filePath);
+    let sizeStr = '';
+    let isDir = afterInfo.isDir;
+
+    try {
+      if (fs.existsSync(fullPath)) {
+        const stat = fs.statSync(fullPath);
+        isDir = stat.isDirectory();
+        if (!isDir) {
+          sizeStr = formatBytes(stat.size);
+        }
+      }
+    } catch (_) {}
+
+    let icon = isDir ? '📁' : '✏️';
+    let action = isDir ? 'Folder' : 'Modified';
+
+    if (afterInfo.statusCode.includes('?') || afterInfo.statusCode.includes('A')) {
+      icon = isDir ? '📁' : '📄';
+      action = isDir ? 'Folder' : 'Created';
+    } else if (afterInfo.statusCode.includes('D')) {
+      icon = '🗑️';
+      action = 'Deleted';
+    } else if (afterInfo.statusCode.includes('R')) {
+      icon = '🔄';
+      action = 'Renamed';
+    }
+
+    results.push(`• ${icon} \`${filePath}\` (${action}${sizeStr ? ' - ' + sizeStr : ''})`);
+  }
+
+  // Check for deleted items that were in beforeMap but not in afterMap
+  for (const [filePath] of beforeMap.entries()) {
+    if (!afterMap.has(filePath)) {
+      if (!fs.existsSync(path.resolve(cwd, filePath))) {
+        results.push(`• 🗑️ \`${filePath}\` (Deleted)`);
+      }
+    }
   }
 
   return results;
@@ -63,5 +123,6 @@ function getWorkspaceChanges(cwd) {
 
 module.exports = {
   formatBytes,
+  takeSnapshot,
   getWorkspaceChanges,
 };

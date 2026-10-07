@@ -5,8 +5,6 @@ const terminal = require('./terminal');
 const antigravity = require('./antigravity');
 const limits = require('./limits');
 const embed = require('./embed');
-const websocket = require('./websocket');
-
 // Allow dynamically added owners
 const authorizedUsers = new Set(config.owners);
 let isSelfbot = config.selfbotMode;
@@ -90,7 +88,6 @@ async function handleMessage(senderPhone, messageText, senderJid, isFromMe = fal
         value: [
           `• \`${prefix}status\` : Status server, CPU, RAM, & Uptime`,
           `• \`${prefix}limit\` : Cek kuota harian chat akun Anda`,
-          `• \`${prefix}game\` : Buka HTML5 Mini App Game WhatsApp`,
         ].join('\n'),
       },
     ];
@@ -139,32 +136,7 @@ async function handleMessage(senderPhone, messageText, senderJid, isFromMe = fal
     return limits.getLimitInfo(senderPhone, isOwnerUser);
   }
 
-  // 3. MINI APP GAME (Accessible to everyone)
-  if (text === `${prefix}game` || text === `${prefix}miniapp` || text === `${prefix}arcade`) {
-    const urls = websocket.getGameUrl();
-    const stats = websocket.getStats();
-    return embed.createEmbed({
-      title: '🎮 *ANTIGRAVITY MINI APP GAMING*',
-      subtitle: 'HTML5 Web App',
-      body: [
-        'Mainkan game interaktif langsung di browser ponsel Anda!',
-        '',
-        '🕹️ *Pilihan Game:*',
-        '• 🚀 *Cyber Runner* : Lompati laser neon & raih rekor skor',
-        '• 🤖 *AI Tic-Tac-Toe* : Duel strategi melawan Antigravity AI',
-        '',
-        '⚡ *Tautan Game:*',
-        `🔗 *Buka di HP (LAN):* ${urls.lan}`,
-        `💻 *Buka di Laptop:* ${urls.local}`,
-        '',
-        `🏆 *Rekor Cyber Runner:* ${stats.highScores.cyber_runner.score} Pts`,
-        `👥 *Total Dimainkan:* ${stats.totalPlays} kali`,
-      ].join('\n'),
-      footer: 'Sentuh link di atas untuk langsung bermain!',
-    });
-  }
-
-  // 4. SYSTEM STATUS (Accessible to everyone, sanitized paths in public)
+  // 3. SYSTEM STATUS (Accessible to everyone, sanitized paths in public)
   if (text === `${prefix}status`) {
     const s = terminal.getSystemStatus();
     const busy = antigravity.isAgentBusy() ? '⏳ Sedang Bekerja' : '🟢 Siap (Idle)';
@@ -498,6 +470,12 @@ async function handleMessage(senderPhone, messageText, senderJid, isFromMe = fal
     const cleanQuoted = options.quotedText.trim();
     const previewQuoted = cleanQuoted.length > 1500 ? cleanQuoted.substring(0, 1500) + '...' : cleanQuoted;
     promptQuery = `[Konteks Pesan Yang Dikutip / Di-reply oleh Pengguna]:\n"${previewQuoted}"\n\n[Pesan / Tanggapan Pengguna]:\n${promptQuery}`;
+  }
+
+  // If user attached an image message
+  if (options && options.imagePath) {
+    const normPath = options.imagePath.replace(/\\/g, '/');
+    promptQuery = `[Lampiran Gambar Diterima Dari WhatsApp]: file:///${normPath}\n(File gambar tersimpan di path lokal laptop: ${normPath}. Silakan periksa, peroleh informasi, dan analisis isi gambar tersebut secara mendalam untuk merespon pengguna.)\n\n[Pertanyaan / Perintah Pengguna]:\n${promptQuery}`;
   }
 
   // Send prompt directly to Antigravity CLI

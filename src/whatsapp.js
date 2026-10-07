@@ -4,18 +4,110 @@ const {
   DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
+  downloadMediaMessage,
   Browsers,
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const readline = require('readline');
 const fs = require('fs');
+const path = require('path');
 const config = require('../config');
 const commands = require('./commands');
 const terminal = require('./terminal');
 const embed = require('./embed');
 
 const logger = pino({ level: 'silent' });
+
+// Suppress noisy libsignal / Baileys session decryption warnings from spamming stdout/stderr
+const origConsoleError = console.error;
+const origConsoleLog = console.log;
+
+const isSignalNoise = (str) => {
+  if (!str || typeof str !== 'string') return false;
+  return str.includes('Bad MAC') ||
+         str.includes('Session error:') ||
+         str.includes('MessageCounterError') ||
+         str.includes('Failed to decrypt message') ||
+         str.includes('Closing session:') ||
+         str.includes('Removing old closed session');
+};
+
+console.error = function (...args) {
+  const msg = args.map(a => (a && a.stack ? a.stack : String(a))).join(' ');
+  if (isSignalNoise(msg)) return;
+  origConsoleError.apply(console, args);
+};
+
+console.log = function (...args) {
+  const msg = args.map(a => String(a)).join(' ');
+  if (isSignalNoise(msg)) return;
+  origConsoleLog.apply(console, args);
+};
+
+const tempMediaDir = path.join(__dirname, '../temp_media');
+
+function cleanupTempMedia() {
+  try {
+    if (!fs.existsSync(tempMediaDir)) {
+      fs.mkdirSync(tempMediaDir, { recursive: true });
+      return;
+    }
+    const now = Date.now();
+    const files = fs.readdirSync(tempMediaDir);
+    for (const f of files) {
+      const fp = path.join(tempMediaDir, f);
+      try {
+        const stat = fs.statSync(fp);
+        if (now - stat.mtimeMs > 2 * 60 * 60 * 1000) {
+          fs.unlinkSync(fp);
+        }
+      } catch (_) {}
+    }
+  } catch (err) {
+    console.warn('[TempMedia Cleanup Error]:', err.message);
+  }
+}
+
+async function downloadAndSaveImageMessage(msg, sock) {
+  try {
+    cleanupTempMedia();
+    const isDirectImage = Boolean(msg.message?.imageMessage);
+    const isQuotedImage = Boolean(msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage);
+
+    if (!isDirectImage && !isQuotedImage) return null;
+
+    let targetMsg = msg;
+    if (isQuotedImage && !isDirectImage) {
+      targetMsg = {
+        key: {
+          remoteJid: msg.key.remoteJid,
+          id: msg.key.id,
+          fromMe: false,
+        },
+        message: msg.message.extendedTextMessage.contextInfo.quotedMessage,
+      };
+    }
+
+    const buffer = await downloadMediaMessage(
+      targetMsg,
+      'buffer',
+      {},
+      { logger, reuploadRequest: sock.updateMediaMessage }
+    );
+
+    if (!buffer || buffer.length === 0) return null;
+
+    const fileName = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
+    const filePath = path.join(tempMediaDir, fileName);
+    fs.writeFileSync(filePath, buffer);
+    console.log(`[Media Downloaded] Saved image for analysis: ${filePath}`);
+    return filePath;
+  } catch (err) {
+    console.error('[Media Download Error]:', err.message);
+    return null;
+  }
+}
 
 // Track message IDs sent by the bot to prevent self-reply loops
 const botSentMessageIds = new Set();
@@ -77,7 +169,7 @@ async function startWhatsAppBot() {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
-    browser: Browsers.windows('Desktop'),
+    browser: Browsers.ubuntu('Chrome'),
     syncFullHistory: false,
     generateHighQualityLinkPreview: true,
     markOnlineOnConnect: true,
@@ -98,26 +190,33 @@ async function startWhatsAppBot() {
     }
 
     phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
+    if (phoneNumber.startsWith('08')) phoneNumber = '62' + phoneNumber.slice(1);
+    else if (phoneNumber.startsWith('8')) phoneNumber = '62' + phoneNumber;
 
     if (phoneNumber) {
       commands.addAuthorizedUser(phoneNumber);
+      console.log(`⏳ Menghubungkan ke server WhatsApp untuk nomor +${phoneNumber}...`);
       setTimeout(async () => {
         try {
           const code = await sock.requestPairingCode(phoneNumber);
-          const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
+          const rawCode = (code || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+          const formattedCode = rawCode.match(/.{1,4}/g)?.join('-') || rawCode;
           console.log('\n======================================================');
-          console.log(`🔑 KODE PAIRING WHATSAPP ANDA: \x1b[1m\x1b[32m${formattedCode}\x1b[0m`);
+          console.log(`📱 NOMOR HP BOT: +${phoneNumber}`);
+          console.log(`🔑 KODE PAIRING (Dengan strip): \x1b[1m\x1b[32m${formattedCode}\x1b[0m`);
+          console.log(`🔑 KODE PAIRING (Tanpa strip): \x1b[1m\x1b[36m${rawCode}\x1b[0m`);
           console.log('======================================================');
           console.log('📱 Langkah aktivasi di WhatsApp HP Anda:');
-          console.log(' 1. Buka aplikasi WhatsApp di HP Anda.');
-          console.log(' 2. Buka menu Titik Tiga (Pengaturan) -> Perangkat Tertaut.');
-          console.log(' 3. Pilih "Tautkan Perangkat" -> pilih "Tautkan dengan nomor telepon saja".');
-          console.log(` 4. Masukkan kode 8 karakter ini: ${formattedCode}`);
+          console.log(' 1. Buka aplikasi WhatsApp di HP nomor ' + phoneNumber);
+          console.log(' 2. Masuk ke Titik Tiga (Pengaturan) -> Perangkat Tertaut (Linked Devices).');
+          console.log(' 3. Klik "Tautkan Perangkat" (Link a Device).');
+          console.log(' 4. Klik "Tautkan dengan nomor telepon saja" di bawah layar kamera.');
+          console.log(` 5. Masukkan kode: ${formattedCode} (atau ${rawCode})`);
           console.log('======================================================\n');
         } catch (err) {
           console.error('❌ Gagal membuat kode pairing:', err.message);
         }
-      }, 3000);
+      }, 5000);
     }
   }
 
@@ -275,8 +374,10 @@ async function startWhatsAppBot() {
       // Extract sender phone number or LID
       const senderPhone = (msg.key.participant || senderJid).split('@')[0].split(':')[0];
 
-      // Extract message content
+      // Extract message content & detect image attachments
       let text = '';
+      const isImage = Boolean(msg.message?.imageMessage || msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage);
+
       if (msg.message.conversation) {
         text = msg.message.conversation;
       } else if (msg.message.extendedTextMessage?.text) {
@@ -286,7 +387,18 @@ async function startWhatsAppBot() {
       }
 
       text = (text || '').trim();
+
+      if (!text && isImage) {
+        text = 'Jelaskan dan analisis gambar terlampir ini secara detail.';
+      }
+
       if (!text) return;
+
+      // Download image media if attached
+      let imagePath = null;
+      if (isImage) {
+        imagePath = await downloadAndSaveImageMessage(msg, sock);
+      }
 
       // If message is fromMe, only process if sent to oneself or starts with prefix
       if (msg.key.fromMe) {
@@ -297,7 +409,7 @@ async function startWhatsAppBot() {
         }
       }
 
-      console.log(`[WA Incoming] From: ${senderPhone} (${senderJid}) | fromMe: ${Boolean(msg.key.fromMe)} | Text: "${text.substring(0, 50)}"`);
+      console.log(`[WA Incoming] From: ${senderPhone} (${senderJid}) | fromMe: ${Boolean(msg.key.fromMe)} | Image: ${Boolean(imagePath)} | Text: "${text.substring(0, 50)}"`);
 
       const isAuthorized = commands.isAuthorized(senderPhone, senderJid, Boolean(msg.key.fromMe));
       const isPublicAllowed = !commands.getSelfbotMode();
@@ -320,7 +432,7 @@ async function startWhatsAppBot() {
         const preview = text.length > 55 ? text.substring(0, 55) + '...' : text;
         try {
           loadingMsg = await sock.sendMessage(senderJid, {
-            text: `⏳ *[Task Berjalan]* Sedang memproses...\n📋 *Task:* _"${preview}"_\n⚡ _Status: Menghubungkan ke Antigravity..._`
+            text: `⏳ *[Task Berjalan]* Sedang memproses...\n📋 *Task:* _"${preview}"_${imagePath ? '\n📷 *Attachment:* _Gambar terlampir_' : ''}\n⚡ _Status: Menghubungkan ke Antigravity..._`
           }, { quoted: msg });
           if (loadingMsg?.key?.id) {
             botSentMessageIds.add(loadingMsg.key.id);
@@ -335,7 +447,7 @@ async function startWhatsAppBot() {
             elapsedSec += 4;
             try {
               const editRes = await sock.sendMessage(senderJid, {
-                text: `⏳ *[Task Berjalan (${elapsedSec}s)]* Sedang memproses...\n📋 *Task:* _"${preview}"_\n⚡ _Status: AI sedang menganalisis & mengerjakan task..._`,
+                text: `⏳ *[Task Berjalan (${elapsedSec}s)]* Sedang memproses...\n📋 *Task:* _"${preview}"_${imagePath ? '\n📷 *Attachment:* _Gambar terlampir_' : ''}\n⚡ _Status: AI sedang menganalisis gambar & mengerjakan task..._`,
                 edit: loadingMsg.key,
               });
               if (editRes?.key?.id) botSentMessageIds.add(editRes.key.id);
@@ -348,7 +460,7 @@ async function startWhatsAppBot() {
       const quotedText = extractQuotedText(msg);
 
       // Process message through commands router
-      const reply = await commands.handleMessage(senderPhone, text, senderJid, Boolean(msg.key.fromMe), { quotedText });
+      const reply = await commands.handleMessage(senderPhone, text, senderJid, Boolean(msg.key.fromMe), { quotedText, imagePath });
 
       if (intervalTimer) clearInterval(intervalTimer);
 

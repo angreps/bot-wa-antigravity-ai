@@ -5,3 +5,5 @@ limits.json
 .env
 *.log
 .DS_Store
+temp_media/
+

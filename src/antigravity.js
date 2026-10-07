@@ -193,6 +193,8 @@ function askAntigravity(promptText, options = {}) {
 
     console.log(`[AGY] Executing in ${workingDir}: agy ${args.join(' ').substring(0, 80)}...`);
 
+    const beforeSnapshot = tracker.takeSnapshot(workingDir);
+
     const child = spawn(agyBin, args, {
       cwd: workingDir,
       env: process.env,
@@ -260,7 +262,7 @@ function askAntigravity(promptText, options = {}) {
         }
       }
 
-      const fileChanges = tracker.getWorkspaceChanges(workingDir);
+      const fileChanges = tracker.getWorkspaceChanges(workingDir, beforeSnapshot);
 
       if (!rawOutput && errorOutput) {
         const cleanedErr = cleanAndFormatOutput(errorOutput);

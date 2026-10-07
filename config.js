@@ -50,7 +50,7 @@ module.exports = {
   owners: Array.from(ownerVariants),
   primaryOwnerPhone: rawOwners.find(o => o.startsWith('62') || o.startsWith('08')) || rawOwners[0] || '',
   primaryOwnerLid: rawOwners.find(o => o.length > 13) || '',
-  botNumber: rawBot ? (rawBot.startsWith('8') ? '62' + rawBot : rawBot) : '',
+  botNumber: rawBot ? (rawBot.startsWith('08') ? '62' + rawBot.slice(1) : (rawBot.startsWith('8') ? '62' + rawBot : rawBot)) : '',
   selfbotMode: (process.env.SELFBOT_MODE || 'true').toLowerCase() === 'true',
   autoRead: (process.env.AUTO_READ || 'true').toLowerCase() === 'true',
   agyPath: process.env.AGY_PATH || defaultLocalAgy,
